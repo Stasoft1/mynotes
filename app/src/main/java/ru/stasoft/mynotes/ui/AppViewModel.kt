@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.crypto.Cipher
+import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.NoteEntity
@@ -111,18 +113,94 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 busy = false
                 return@launch
             }
+            openWith(key)
+        }
+    }
+
+    /** Открывает базу мастер-ключом (после пароля или отпечатка). Ключ затирается. */
+    private suspend fun openWith(key: ByteArray) {
+        try {
             val db = withContext(Dispatchers.IO) {
                 val d = AppDatabase.open(app, key)
                 d.notes().count() // открываем базу сразу, чтобы ошибка проявилась здесь
                 d
             }
-            key.fill(0)
             dbFlow.value = db
             needSetup = false
             unlocked = true
-            busy = false
+            error = null
             refreshPath()
+        } catch (e: Exception) {
+            error = "Не удалось открыть базу: ${e.message}"
+        } finally {
+            key.fill(0)
+            busy = false
         }
+    }
+
+    // ---------- вход по отпечатку ----------
+
+    var biometricEnabled by mutableStateOf(BiometricVault.isEnabled(app))
+        private set
+
+    fun biometricAvailable(): Boolean = BiometricVault.isAvailable(app)
+
+    /** Вызывается после успешного отпечатка: расшифровывает мастер-ключ и открывает базу. */
+    fun unlockWithBiometric(cipher: Cipher) {
+        if (busy) return
+        busy = true
+        viewModelScope.launch {
+            val key = try {
+                BiometricVault.unwrap(app, cipher)
+            } catch (e: Exception) {
+                null
+            }
+            if (key == null) {
+                error = "Не удалось войти по отпечатку. Введите пароль."
+                busy = false
+            } else {
+                openWith(key)
+            }
+        }
+    }
+
+    fun onBiometricFailure(message: String) {
+        error = message
+    }
+
+    /** Проверяет пароль и возвращает мастер-ключ (для включения отпечатка) или null. */
+    suspend fun verifyPassword(password: String): ByteArray? {
+        val wait = Vault.lockoutRemainingMs(app)
+        if (wait > 0) {
+            message = "Слишком много попыток. Подождите ${(wait + 999) / 1000} с"
+            return null
+        }
+        val chars = password.toCharArray()
+        return withContext(Dispatchers.Default) {
+            try {
+                Vault.unlock(app, chars)
+            } finally {
+                chars.fill('\u0000')
+            }
+        }
+    }
+
+    fun storeBiometricKey(cipher: Cipher, master: ByteArray) {
+        try {
+            BiometricVault.store(app, cipher, master)
+            biometricEnabled = true
+            message = "Вход по отпечатку включён"
+        } catch (e: Exception) {
+            message = "Не удалось включить вход по отпечатку: ${e.message}"
+        } finally {
+            master.fill(0)
+        }
+    }
+
+    fun disableBiometric() {
+        BiometricVault.disable(app)
+        biometricEnabled = false
+        message = "Вход по отпечатку выключен"
     }
 
     fun lock() {

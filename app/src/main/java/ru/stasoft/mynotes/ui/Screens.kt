@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,7 +50,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
 
@@ -71,6 +76,28 @@ fun AppRoot(vm: AppViewModel) {
 fun LockScreen(vm: AppViewModel) {
     var password by rememberSaveable { mutableStateOf("") }
     var confirm by rememberSaveable { mutableStateOf("") }
+    val ctx = LocalContext.current
+    val activity = ctx as? FragmentActivity
+    val canBio = vm.biometricEnabled && !vm.needSetup && vm.biometricAvailable()
+    val promptBio: () -> Unit = {
+        val cipher = BiometricVault.decryptCipher(ctx)
+        if (cipher == null) {
+            vm.disableBiometric()
+        } else if (activity != null) {
+            showBiometricPrompt(
+                activity = activity,
+                title = "Вход в МоиЗаметки",
+                negativeText = "Ввести пароль",
+                cipher = cipher,
+                onSuccess = { vm.unlockWithBiometric(it) },
+                onFailure = { vm.onBiometricFailure(it) },
+            )
+        }
+    }
+    // Сразу показываем запрос отпечатка при открытии и после автоблокировки.
+    LaunchedEffect(canBio, vm.unlocked) {
+        if (canBio && !vm.unlocked) promptBio()
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -119,6 +146,9 @@ fun LockScreen(vm: AppViewModel) {
                 },
                 enabled = !vm.busy,
             ) { Text(if (vm.needSetup) "Создать" else "Открыть") }
+            if (canBio) {
+                TextButton(onClick = promptBio, modifier = Modifier.padding(start = 8.dp)) { Text("Отпечаток") }
+            }
             if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(start = 16.dp))
         }
     }
@@ -137,6 +167,9 @@ fun TreeScreen(vm: AppViewModel) {
     var menuOpen by remember { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var actionTarget by remember { mutableStateOf<NoteEntity?>(null) }
+    var showBioSetup by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.importMtnt(uri)
@@ -184,6 +217,15 @@ fun TreeScreen(vm: AppViewModel) {
                                     picker.launch(arrayOf("*/*"))
                                 },
                             )
+                            if (vm.biometricAvailable()) {
+                                DropdownMenuItem(
+                                    text = { Text(if (vm.biometricEnabled) "Выключить вход по отпечатку" else "Включить вход по отпечатку") },
+                                    onClick = {
+                                        menuOpen = false
+                                        if (vm.biometricEnabled) vm.disableBiometric() else showBioSetup = true
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Заблокировать") },
                                 onClick = {
@@ -235,6 +277,38 @@ fun TreeScreen(vm: AppViewModel) {
         }
     }
 
+    if (showBioSetup) {
+        BioSetupDialog(
+            onDismiss = { showBioSetup = false },
+            onConfirm = { password ->
+                showBioSetup = false
+                scope.launch {
+                    val master = vm.verifyPassword(password)
+                    val activity = ctx as? FragmentActivity
+                    if (master == null) {
+                        if (vm.message == null) vm.message = "Неверный пароль"
+                    } else if (activity != null) {
+                        try {
+                            showBiometricPrompt(
+                                activity = activity,
+                                title = "Подтвердите отпечаток",
+                                negativeText = "Отмена",
+                                cipher = BiometricVault.encryptCipher(),
+                                onSuccess = { vm.storeBiometricKey(it, master) },
+                                onFailure = {
+                                    master.fill(0)
+                                    vm.message = it
+                                },
+                            )
+                        } catch (e: Exception) {
+                            master.fill(0)
+                            vm.message = "Не удалось включить вход по отпечатку: ${e.message}"
+                        }
+                    }
+                }
+            },
+        )
+    }
     if (showCreate) {
         CreateDialog(
             onDismiss = { showCreate = false },
@@ -292,6 +366,31 @@ private fun NoteRow(note: NoteEntity, onClick: () -> Unit, onLongClick: () -> Un
             }
         }
     }
+}
+
+@Composable
+private fun BioSetupDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Вход по отпечатку") },
+        text = {
+            Column {
+                Text("Введите пароль, чтобы подтвердить, что это вы.")
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Пароль") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(password) }) { Text("Далее") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable
