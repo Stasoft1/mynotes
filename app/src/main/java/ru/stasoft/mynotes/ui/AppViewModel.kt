@@ -1,0 +1,258 @@
+package ru.stasoft.mynotes.ui
+
+import android.app.Application
+import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import ru.stasoft.mynotes.crypto.Vault
+import ru.stasoft.mynotes.data.AppDatabase
+import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.importer.MtntImporter
+
+class AppViewModel(private val app: Application) : AndroidViewModel(app) {
+
+    var unlocked by mutableStateOf(false)
+        private set
+    var needSetup by mutableStateOf(!Vault.isSetup(app))
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+    var message by mutableStateOf<String?>(null)
+
+    /** Открытая в редакторе запись (null — редактор закрыт). */
+    var editing by mutableStateOf<NoteEntity?>(null)
+        private set
+
+    /** Цепочка папок от корня до текущей. */
+    var path by mutableStateOf<List<NoteEntity>>(emptyList())
+        private set
+
+    private val dbFlow = MutableStateFlow<AppDatabase?>(null)
+    val folderId = MutableStateFlow<Long?>(null)
+    val query = MutableStateFlow("")
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val items: StateFlow<List<NoteEntity>> =
+        combine(dbFlow, folderId, query) { db, fid, q -> Triple(db, fid, q) }
+            .flatMapLatest { (db, fid, q) ->
+                when {
+                    db == null -> flowOf(emptyList())
+                    q.isBlank() -> db.notes().children(fid)
+                    else -> db.notes().search(q.trim())
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private var backgroundedAt = 0L
+
+    private fun dao() = dbFlow.value?.notes()
+
+    // ---------- вход ----------
+
+    fun submitPassword(password: String, confirm: String?) {
+        if (busy) return
+        error = null
+        if (needSetup) {
+            if (password.length < Vault.minPasswordLength()) {
+                error = "Пароль должен быть не короче ${Vault.minPasswordLength()} символов"
+                return
+            }
+            if (password != confirm) {
+                error = "Пароли не совпадают"
+                return
+            }
+        } else {
+            val wait = Vault.lockoutRemainingMs(app)
+            if (wait > 0) {
+                error = "Слишком много попыток. Подождите ${(wait + 999) / 1000} с"
+                return
+            }
+        }
+        busy = true
+        viewModelScope.launch {
+            val chars = password.toCharArray()
+            val key: ByteArray? = withContext(Dispatchers.Default) {
+                try {
+                    if (needSetup) Vault.setup(app, chars) else Vault.unlock(app, chars)
+                } finally {
+                    chars.fill('\u0000')
+                }
+            }
+            if (key == null) {
+                error = "Неверный пароль"
+                busy = false
+                return@launch
+            }
+            val db = withContext(Dispatchers.IO) {
+                val d = AppDatabase.open(app, key)
+                d.notes().count() // открываем базу сразу, чтобы ошибка проявилась здесь
+                d
+            }
+            key.fill(0)
+            dbFlow.value = db
+            needSetup = false
+            unlocked = true
+            busy = false
+            refreshPath()
+        }
+    }
+
+    fun lock() {
+        val db = dbFlow.value
+        dbFlow.value = null
+        unlocked = false
+        editing = null
+        path = emptyList()
+        folderId.value = null
+        query.value = ""
+        error = null
+        if (db != null) viewModelScope.launch(Dispatchers.IO) { db.close() }
+    }
+
+    fun onBackground() {
+        backgroundedAt = System.currentTimeMillis()
+    }
+
+    fun onForeground() {
+        if (unlocked && System.currentTimeMillis() - backgroundedAt > AUTO_LOCK_MS) lock()
+    }
+
+    // ---------- навигация ----------
+
+    fun openFolder(note: NoteEntity) {
+        query.value = ""
+        folderId.value = note.id
+        refreshPath()
+    }
+
+    fun goToPathIndex(index: Int) {
+        // index = -1 — корень
+        folderId.value = if (index < 0) null else path[index].id
+        refreshPath()
+    }
+
+    fun goUp(): Boolean {
+        if (editing != null) {
+            closeEditor()
+            return true
+        }
+        if (query.value.isNotBlank()) {
+            query.value = ""
+            return true
+        }
+        if (folderId.value == null) return false
+        folderId.value = path.getOrNull(path.size - 2)?.id
+        refreshPath()
+        return true
+    }
+
+    private fun refreshPath() {
+        val dao = dao() ?: return
+        val target = folderId.value
+        viewModelScope.launch {
+            val chain = ArrayDeque<NoteEntity>()
+            var cur = target
+            while (cur != null) {
+                val n = dao.get(cur) ?: break
+                chain.addFirst(n)
+                cur = n.parentId
+            }
+            path = chain.toList()
+        }
+    }
+
+    // ---------- записи ----------
+
+    fun create(title: String, isFolder: Boolean) {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val id = dao.insert(
+                NoteEntity(
+                    parentId = folderId.value,
+                    title = title.trim(),
+                    isFolder = isFolder,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            if (!isFolder) editing = dao.get(id)
+        }
+    }
+
+    fun openNote(note: NoteEntity) {
+        if (note.isFolder) openFolder(note) else editing = note
+    }
+
+    fun closeEditor() {
+        editing = null
+    }
+
+    fun save(id: Long, title: String, body: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val cur = dao.get(id) ?: return@launch
+            if (cur.title == title && cur.body == body) return@launch
+            dao.update(cur.copy(title = title, body = body, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    fun rename(note: NoteEntity, title: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.update(note.copy(title = title.trim(), updatedAt = System.currentTimeMillis())) }
+    }
+
+    fun delete(note: NoteEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.delete(note) }
+    }
+
+    // ---------- импорт ----------
+
+    fun importMtnt(uri: Uri) {
+        val db = dbFlow.value ?: return
+        if (busy) return
+        busy = true
+        viewModelScope.launch {
+            try {
+                val count = withContext(Dispatchers.IO) {
+                    val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw MtntImporter.ImportException("Не удалось открыть файл")
+                    val roots = MtntImporter.parse(bytes)
+                    val stamp = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                    MtntImporter.importInto(db, roots, "Импорт MyTreeNotes $stamp")
+                }
+                message = "Импортировано записей: $count"
+            } catch (e: MtntImporter.ImportException) {
+                message = e.message
+            } catch (e: Exception) {
+                message = "Ошибка импорта: ${e.message}"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    private companion object {
+        const val AUTO_LOCK_MS = 30_000L
+    }
+}
