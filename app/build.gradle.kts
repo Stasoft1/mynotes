@@ -17,9 +17,24 @@ android {
         versionName = "0.1.0"
     }
 
+    // Постоянный ключ подписи, чтобы каждое новое APK обновляло установленное приложение, а не требовало удаления.
+    // Репозиторий приватный; если сделаете его публичным, смените ключ.
+    signingConfigs {
+        create("sideload") {
+            storeFile = file("mynotes-sideload.jks")
+            storePassword = "mynotes-sideload"
+            keyAlias = "mynotes"
+            keyPassword = "mynotes-sideload"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("sideload")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("sideload")
         }
     }
 
