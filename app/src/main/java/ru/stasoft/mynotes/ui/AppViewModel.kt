@@ -202,6 +202,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     parentId = folderId.value,
                     title = title.trim(),
                     isFolder = isFolder,
+                    sortIndex = dao.maxSort(folderId.value) + 1,
                     createdAt = now,
                     updatedAt = now,
                 ),
