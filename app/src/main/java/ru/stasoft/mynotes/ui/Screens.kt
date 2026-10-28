@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.displayTitle
 
 @Composable
 fun AppRoot(vm: AppViewModel) {
@@ -266,12 +267,21 @@ private fun NoteRow(note: NoteEntity, onClick: () -> Unit, onLongClick: () -> Un
         Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
         Column(Modifier.padding(start = 12.dp)) {
             Text(
-                note.title.ifBlank { "Без названия" },
+                note.displayTitle().ifBlank { "Без названия" },
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (!note.isFolder && note.body.isNotBlank()) {
+            val status = remember(note.reminderAt, note.reminderDoneAt) { reminderStatus(note) }
+            if (status != null) {
+                val color = when {
+                    status.missed -> MaterialTheme.colorScheme.error
+                    status.done -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.primary
+                }
+                Text(status.headline, style = MaterialTheme.typography.bodyMedium, color = color)
+                Text(status.date, style = MaterialTheme.typography.bodySmall, color = color)
+            } else if (!note.isFolder && note.body.isNotBlank() && note.title.isNotBlank()) {
                 Text(
                     note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,

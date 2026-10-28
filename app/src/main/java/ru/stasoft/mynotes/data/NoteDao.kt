@@ -9,10 +9,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NoteDao {
-    @Query(
-        "SELECT * FROM notes WHERE parentId IS :parentId " +
-            "ORDER BY isFolder DESC, sortIndex ASC, title COLLATE NOCASE ASC",
-    )
+    // Ручной порядок: как сохранён в sortIndex. Автосортировка по режиму папки делается в ViewModel.
+    @Query("SELECT * FROM notes WHERE parentId IS :parentId ORDER BY sortIndex ASC, id ASC")
     fun children(parentId: Long?): Flow<List<NoteEntity>>
 
     @Query(

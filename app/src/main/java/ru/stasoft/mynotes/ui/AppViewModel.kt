@@ -18,12 +18,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.sortNotes
 import ru.stasoft.mynotes.importer.MtntImporter
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -50,13 +52,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val folderId = MutableStateFlow<Long?>(null)
     val query = MutableStateFlow("")
 
+    /** Режим сортировки текущей папки (у корня — ручной). */
+    private val sortMode = MutableStateFlow(0)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val items: StateFlow<List<NoteEntity>> =
-        combine(dbFlow, folderId, query) { db, fid, q -> Triple(db, fid, q) }
-            .flatMapLatest { (db, fid, q) ->
+        combine(dbFlow, folderId, query, sortMode) { db, fid, q, mode -> listOf(db, fid, q, mode) }
+            .flatMapLatest { args ->
+                val db = args[0] as AppDatabase?
+                val fid = args[1] as Long?
+                val q = args[2] as String
+                val mode = args[3] as Int
                 when {
                     db == null -> flowOf(emptyList())
-                    q.isBlank() -> db.notes().children(fid)
+                    q.isBlank() -> db.notes().children(fid).map { sortNotes(it, mode) }
                     else -> db.notes().search(q.trim())
                 }
             }
@@ -123,6 +132,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         editing = null
         path = emptyList()
         folderId.value = null
+        sortMode.value = 0
         query.value = ""
         error = null
         if (db != null) viewModelScope.launch(Dispatchers.IO) { db.close() }
@@ -177,6 +187,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 cur = n.parentId
             }
             path = chain.toList()
+            sortMode.value = path.lastOrNull()?.sortMode ?: 0
         }
     }
 

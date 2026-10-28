@@ -72,7 +72,8 @@ object MtntImporter {
             val rootId = dao.insert(
                 NoteEntity(title = folderTitle, isFolder = true, createdAt = now, updatedAt = now),
             )
-            suspend fun add(node: Node, parentId: Long) {
+            // position — место среди соседей: в MyTreeNotes порядок в файле и есть ручной порядок.
+            suspend fun add(node: Node, parentId: Long, position: Int) {
                 val a = node.attrs
                 val created = parseTime(a["date"]) ?: now
                 val id = dao.insert(
@@ -81,18 +82,25 @@ object MtntImporter {
                         title = a["title"].orEmpty(),
                         body = a["value"].orEmpty(),
                         isFolder = node.children.isNotEmpty(),
-                        sortIndex = a["sort"]?.toIntOrNull() ?: 0,
+                        sortIndex = position,
                         createdAt = created,
                         updatedAt = created,
                         reminderAt = parseTime(a["reminderDate"]),
                         keyword = a["keyword"].orEmpty(),
                         legacyId = a["id"],
+                        // В MyTreeNotes атрибут sort у папки — режим сортировки её содержимого.
+                        sortMode = a["sort"]?.toIntOrNull() ?: 0,
+                        reminderPeriod = a["reminderPeriod"]?.toIntOrNull() ?: 0,
+                        reminderCheckDays = a["reminderCheckDays"]?.toIntOrNull() ?: 0,
+                        reminderDoneAt = parseTime(a["reminderDone"]),
+                        flags = a["flags"]?.toIntOrNull() ?: 0,
+                        mapJson = a["map"].orEmpty(),
                     ),
                 )
                 count++
-                for (child in node.children) add(child, id)
+                node.children.forEachIndexed { i, child -> add(child, id, i) }
             }
-            for (r in roots) add(r, rootId)
+            roots.forEachIndexed { i, r -> add(r, rootId, i) }
         }
         return count
     }
