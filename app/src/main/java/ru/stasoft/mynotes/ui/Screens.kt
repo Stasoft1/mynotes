@@ -1,6 +1,10 @@
 package ru.stasoft.mynotes.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -61,10 +65,20 @@ import ru.stasoft.mynotes.data.displayTitle
 @Composable
 fun AppRoot(vm: AppViewModel) {
     BackHandler(enabled = vm.unlocked) { vm.goUp() }
+    val appCtx = LocalContext.current
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(vm.unlocked) {
+        if (vm.unlocked && Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(appCtx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when {
             !vm.unlocked -> LockScreen(vm)
             vm.editing != null -> EditorScreen(vm, vm.editing!!)
+            vm.showReminders -> ReminderListScreen(vm)
             else -> TreeScreen(vm)
         }
     }
@@ -210,6 +224,13 @@ fun TreeScreen(vm: AppViewModel) {
                     Box {
                         TextButton(onClick = { menuOpen = true }) { Text("⋮") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Напоминания") },
+                                onClick = {
+                                    menuOpen = false
+                                    vm.showReminders = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Импорт из .mtnt") },
                                 onClick = {
@@ -474,6 +495,7 @@ private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (Str
 fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var title by remember(note.id) { mutableStateOf(note.title) }
     var body by remember(note.id) { mutableStateOf(note.body) }
+    var showReminderDialog by remember { mutableStateOf(false) }
 
     // Автосохранение с небольшой задержкой после последней правки.
     LaunchedEffect(note.id, title, body) {
@@ -511,6 +533,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            ReminderRow(note = note, onEdit = { showReminderDialog = true })
             OutlinedTextField(
                 value = body,
                 onValueChange = { body = it },
@@ -521,5 +544,20 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .padding(top = 8.dp, bottom = 8.dp),
             )
         }
+    }
+
+    if (showReminderDialog) {
+        ReminderDialog(
+            note = note,
+            onDismiss = { showReminderDialog = false },
+            onSave = { due, period, lead ->
+                showReminderDialog = false
+                vm.setReminder(note.id, due, period, lead)
+            },
+            onClear = {
+                showReminderDialog = false
+                vm.setReminder(note.id, null, 0, 0)
+            },
+        )
     }
 }

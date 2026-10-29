@@ -19,11 +19,18 @@ interface NoteDao {
     )
     fun search(q: String): Flow<List<NoteEntity>>
 
-    @Query("SELECT * FROM notes WHERE id = :id")
-    suspend fun get(id: Long): NoteEntity?
+    /** Заметки с активными напоминаниями: повторяющиеся и ещё не выполненные разовые. */
+    @Query(
+        "SELECT * FROM notes WHERE reminderAt IS NOT NULL AND (reminderPeriod > 0 OR reminderDoneAt IS NULL) " +
+            "ORDER BY reminderAt ASC",
+    )
+    fun withReminders(): Flow<List<NoteEntity>>
 
     @Query("SELECT COALESCE(MAX(sortIndex), -1) FROM notes WHERE parentId IS :parentId")
     suspend fun maxSort(parentId: Long?): Int
+
+    @Query("SELECT * FROM notes WHERE id = :id")
+    suspend fun get(id: Long): NoteEntity?
 
     @Query("SELECT COUNT(*) FROM notes")
     suspend fun count(): Int

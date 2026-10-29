@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.crypto.Cipher
+import kotlinx.coroutines.Job
+import ru.stasoft.mynotes.reminders.ReminderLogic
+import ru.stasoft.mynotes.reminders.ReminderSync
 import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
@@ -74,6 +77,54 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var backgroundedAt = 0L
+
+    // ---------- напоминания ----------
+
+    var showReminders by mutableStateOf(false)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val reminderItems: StateFlow<List<NoteEntity>> =
+        dbFlow
+            .flatMapLatest { db -> db?.notes()?.withReminders() ?: flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private var reminderJob: Job? = null
+
+    private fun startReminderSync(db: AppDatabase) {
+        reminderJob?.cancel()
+        reminderJob = viewModelScope.launch(Dispatchers.IO) {
+            ReminderSync.applyPending(app, db.notes())
+            db.notes().withReminders().collect { ReminderSync.rebuild(app, it) }
+        }
+    }
+
+    fun setReminder(noteId: Long, dueAt: Long?, period: Int, leadDays: Int) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val cur = dao.get(noteId) ?: return@launch
+            dao.update(
+                cur.copy(
+                    reminderAt = dueAt,
+                    reminderPeriod = if (dueAt == null) 0 else period,
+                    reminderCheckDays = if (dueAt == null) 0 else leadDays,
+                    reminderDoneAt = null,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            if (editing?.id == noteId) editing = dao.get(noteId)
+        }
+    }
+
+    /** «Готово»: повторяющееся напоминание переходит на следующую дату, разовое считается выполненным. */
+    fun acknowledge(note: NoteEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val due = note.reminderAt ?: return@launch
+            val now = System.currentTimeMillis()
+            val next = ReminderLogic.advance(due, note.reminderPeriod, now)
+            dao.update(note.copy(reminderAt = next ?: due, reminderDoneAt = now))
+        }
+    }
 
     private fun dao() = dbFlow.value?.notes()
 
@@ -130,6 +181,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             unlocked = true
             error = null
             refreshPath()
+            startReminderSync(db)
         } catch (e: Exception) {
             error = "Не удалось открыть базу: ${e.message}"
         } finally {
@@ -205,8 +257,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun lock() {
         val db = dbFlow.value
+        reminderJob?.cancel()
+        reminderJob = null
         dbFlow.value = null
         unlocked = false
+        showReminders = false
         editing = null
         path = emptyList()
         folderId.value = null
@@ -241,6 +296,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun goUp(): Boolean {
         if (editing != null) {
             closeEditor()
+            return true
+        }
+        if (showReminders) {
+            showReminders = false
             return true
         }
         if (query.value.isNotBlank()) {
