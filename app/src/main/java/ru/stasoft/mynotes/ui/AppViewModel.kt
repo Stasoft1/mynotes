@@ -29,7 +29,9 @@ import ru.stasoft.mynotes.reminders.ReminderSync
 import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
+import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.SnippetEntity
 import ru.stasoft.mynotes.data.sortNotes
 import ru.stasoft.mynotes.importer.MtntImporter
 
@@ -77,6 +79,60 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var backgroundedAt = 0L
+
+    // ---------- быстрые вставки ----------
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val allSnippets: StateFlow<List<SnippetEntity>> =
+        dbFlow
+            .flatMapLatest { db -> db?.notes()?.allSnippets() ?: flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Папки-предки открытой заметки, от ближайшей к корню: вставки этих папок доступны в редакторе. */
+    var editingChain by mutableStateOf<List<Long>>(emptyList())
+        private set
+
+    private fun loadChain(note: NoteEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val chain = mutableListOf<Long>()
+            var cur = note.parentId
+            while (cur != null && chain.size < 64) {
+                chain.add(cur)
+                cur = dao.get(cur)?.parentId
+            }
+            editingChain = chain
+        }
+    }
+
+    private suspend fun seedSnippetsOnce(db: AppDatabase) {
+        val prefs = app.getSharedPreferences("app", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("snippets_seeded", false)) return
+        val dao = db.notes()
+        if (dao.snippetCount() == 0) {
+            DEFAULT_SNIPPETS.forEachIndexed { i, (label, text) ->
+                dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = i))
+            }
+        }
+        prefs.edit().putBoolean("snippets_seeded", true).apply()
+    }
+
+    fun saveSnippet(id: Long?, folderId: Long?, label: String, text: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            if (id == null) {
+                dao.insertSnippet(SnippetEntity(folderId = folderId, label = label, text = text, sortIndex = dao.maxSnippetSort() + 1))
+            } else {
+                val cur = allSnippets.value.firstOrNull { it.id == id } ?: return@launch
+                dao.updateSnippet(cur.copy(label = label, text = text))
+            }
+        }
+    }
+
+    fun deleteSnippet(s: SnippetEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.deleteSnippet(s) }
+    }
 
     // ---------- напоминания ----------
 
@@ -195,6 +251,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             error = null
             refreshPath()
             startReminderSync(db)
+            try {
+                withContext(Dispatchers.IO) { seedSnippetsOnce(db) }
+            } catch (e: Exception) {
+                android.util.Log.e("MyNotes", "snippet seed failed", e)
+            }
         } catch (e: Exception) {
             error = "Не удалось открыть базу: ${e.message}"
         } finally {
@@ -357,12 +418,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     updatedAt = now,
                 ),
             )
-            if (!isFolder) editing = dao.get(id)
+            if (!isFolder) dao.get(id)?.let {
+                editing = it
+                loadChain(it)
+            }
         }
     }
 
     fun openNote(note: NoteEntity) {
-        if (note.isFolder) openFolder(note) else editing = note
+        if (note.isFolder) {
+            openFolder(note)
+        } else {
+            editing = note
+            loadChain(note)
+        }
     }
 
     fun closeEditor() {

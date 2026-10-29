@@ -32,6 +32,24 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun get(id: Long): NoteEntity?
 
+    @Query("SELECT * FROM snippets ORDER BY sortIndex ASC, id ASC")
+    fun allSnippets(): Flow<List<SnippetEntity>>
+
+    @Query("SELECT COUNT(*) FROM snippets")
+    suspend fun snippetCount(): Int
+
+    @Query("SELECT COALESCE(MAX(sortIndex), -1) FROM snippets")
+    suspend fun maxSnippetSort(): Int
+
+    @Insert
+    suspend fun insertSnippet(s: SnippetEntity): Long
+
+    @Update
+    suspend fun updateSnippet(s: SnippetEntity)
+
+    @Delete
+    suspend fun deleteSnippet(s: SnippetEntity)
+
     @Query("SELECT COUNT(*) FROM notes")
     suspend fun count(): Int
 

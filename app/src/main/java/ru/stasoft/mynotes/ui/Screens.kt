@@ -12,6 +12,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import ru.stasoft.mynotes.data.SnippetEntity
+import ru.stasoft.mynotes.data.expandSnippet
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -182,6 +189,7 @@ fun TreeScreen(vm: AppViewModel) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var actionTarget by remember { mutableStateOf<NoteEntity?>(null) }
     var showBioSetup by remember { mutableStateOf(false) }
+    var showSnippets by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -224,6 +232,13 @@ fun TreeScreen(vm: AppViewModel) {
                     Box {
                         TextButton(onClick = { menuOpen = true }) { Text("⋮") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Вставки этой папки") },
+                                onClick = {
+                                    menuOpen = false
+                                    showSnippets = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Напоминания") },
                                 onClick = {
@@ -298,6 +313,7 @@ fun TreeScreen(vm: AppViewModel) {
         }
     }
 
+    if (showSnippets) SnippetsDialog(vm, onDismiss = { showSnippets = false })
     if (showBioSetup) {
         BioSetupDialog(
             onDismiss = { showBioSetup = false },
@@ -494,8 +510,18 @@ private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (Str
 @Composable
 fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var title by remember(note.id) { mutableStateOf(note.title) }
-    var body by remember(note.id) { mutableStateOf(note.body) }
+    var bodyField by remember(note.id) { mutableStateOf(TextFieldValue(note.body)) }
+    val body = bodyField.text
     var showReminderDialog by remember { mutableStateOf(false) }
+    val allSnippets by vm.allSnippets.collectAsState()
+    val chain = vm.editingChain
+    val snippets = remember(allSnippets, chain) {
+        val rank = chain.withIndex().associate { (i, id) -> id to i }
+        fun depth(sn: SnippetEntity): Int = sn.folderId?.let { rank[it] } ?: Int.MAX_VALUE
+        allSnippets
+            .filter { sn -> sn.folderId == null || rank.containsKey(sn.folderId) }
+            .sortedWith(compareBy<SnippetEntity>({ depth(it) }, { it.sortIndex }, { it.id }))
+    }
 
     // Автосохранение с небольшой задержкой после последней правки.
     LaunchedEffect(note.id, title, body) {
@@ -523,6 +549,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         Column(
             Modifier
                 .padding(padding)
+                .imePadding()
                 .padding(horizontal = 16.dp)
                 .fillMaxSize(),
         ) {
@@ -535,14 +562,38 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             )
             ReminderRow(note = note, onEdit = { showReminderDialog = true })
             OutlinedTextField(
-                value = body,
-                onValueChange = { body = it },
+                value = bodyField,
+                onValueChange = { bodyField = it },
                 label = { Text("Текст") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(top = 8.dp, bottom = 8.dp),
             )
+            if (snippets.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 8.dp),
+                ) {
+                    snippets.forEach { sn ->
+                        AssistChip(
+                            onClick = {
+                                val text = expandSnippet(sn.text)
+                                val start = bodyField.selection.min
+                                val end = bodyField.selection.max
+                                bodyField = TextFieldValue(
+                                    bodyField.text.replaceRange(start, end, text),
+                                    TextRange(start + text.length),
+                                )
+                            },
+                            label = { Text(sn.label, maxLines = 1) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 
