@@ -93,8 +93,21 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     private fun startReminderSync(db: AppDatabase) {
         reminderJob?.cancel()
         reminderJob = viewModelScope.launch(Dispatchers.IO) {
-            ReminderSync.applyPending(app, db.notes())
-            db.notes().withReminders().collect { ReminderSync.rebuild(app, it) }
+            // Сбой в уведомлениях не должен ронять приложение.
+            try {
+                ReminderSync.applyPending(app, db.notes())
+                db.notes().withReminders().collect {
+                    try {
+                        ReminderSync.rebuild(app, it)
+                    } catch (e: Exception) {
+                        android.util.Log.e("MyNotes", "reminder rebuild failed", e)
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("MyNotes", "reminder sync failed", e)
+            }
         }
     }
 

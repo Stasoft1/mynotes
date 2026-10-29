@@ -5,7 +5,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.io.File
 import java.security.KeyStore
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -101,9 +100,10 @@ object ReminderStore {
         json.put("pending", JSONArray().also { a ->
             data.pending.forEach { p -> a.put(JSONObject().put("id", p.id).put("doneAt", p.doneAt)) }
         })
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        // Keystore сам создаёт случайный IV; передавать свой нельзя.
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val iv = cipher.iv
         val enc = cipher.doFinal(json.toString().toByteArray(Charsets.UTF_8))
         val tmp = File(ctx.filesDir, "$FILE.tmp")
         tmp.writeBytes(iv + enc)

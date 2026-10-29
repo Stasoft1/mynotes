@@ -9,7 +9,11 @@ class MyNotesApp : Application() {
         super.onCreate()
         // Нативная библиотека SQLCipher должна быть загружена до первого открытия базы.
         System.loadLibrary("sqlcipher")
-        ReminderNotifier.ensureChannel(this)
-        ReminderScheduler.rescheduleAll(this)
+        try {
+            ReminderNotifier.ensureChannel(this)
+            ReminderScheduler.rescheduleAll(this)
+        } catch (e: Exception) {
+            android.util.Log.e("MyNotes", "reminder init failed", e)
+        }
     }
 }
