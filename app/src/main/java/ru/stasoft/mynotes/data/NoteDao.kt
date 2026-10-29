@@ -32,6 +32,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun get(id: Long): NoteEntity?
 
+    @Query("SELECT COUNT(*) FROM notes WHERE parentId = :id")
+    suspend fun childCount(id: Long): Int
+
     @Query("SELECT * FROM snippets ORDER BY sortIndex ASC, id ASC")
     fun allSnippets(): Flow<List<SnippetEntity>>
 

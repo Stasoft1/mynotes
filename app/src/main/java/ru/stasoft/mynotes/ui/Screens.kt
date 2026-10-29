@@ -11,7 +11,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AssistChip
@@ -184,7 +190,6 @@ fun TreeScreen(vm: AppViewModel) {
     val query by vm.query.collectAsState()
     val folderId by vm.folderId.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    var showCreate by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var actionTarget by remember { mutableStateOf<NoteEntity?>(null) }
@@ -225,12 +230,17 @@ fun TreeScreen(vm: AppViewModel) {
                     if (folderId != null && !searching) TextButton(onClick = { vm.goUp() }) { Text("←") }
                 },
                 actions = {
-                    TextButton(onClick = {
+                    if (!searching) {
+                        BarButton("＋") { vm.newNote() }
+                        BarButton("📂") { vm.newChild() }
+                    }
+                    BarButton(if (searching) "✕" else "🔍") {
                         searching = !searching
                         if (!searching) vm.query.value = ""
-                    }) { Text(if (searching) "✕" else "🔍") }
+                    }
+                    if (!searching) BarButton("📅") { vm.showReminders = true }
                     Box {
-                        TextButton(onClick = { menuOpen = true }) { Text("⋮") }
+                        BarButton("⋮") { menuOpen = true }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Вставки этой папки") },
@@ -274,9 +284,6 @@ fun TreeScreen(vm: AppViewModel) {
                 },
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showCreate = true }) { Text("+", style = MaterialTheme.typography.headlineSmall) }
-        },
     ) { padding ->
         Column(Modifier.padding(padding)) {
             if (vm.path.isNotEmpty() && query.isBlank()) {
@@ -295,7 +302,7 @@ fun TreeScreen(vm: AppViewModel) {
             if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(16.dp))
             if (items.isEmpty() && !vm.busy) {
                 Text(
-                    if (query.isBlank()) "Здесь пока пусто. Нажмите +, чтобы добавить заметку или папку." else "Ничего не найдено",
+                    if (query.isBlank()) "Здесь пока пусто. Нажмите ＋, чтобы добавить заметку." else "Ничего не найдено",
                     modifier = Modifier.padding(24.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -304,8 +311,13 @@ fun TreeScreen(vm: AppViewModel) {
                 items(items, key = { it.id }) { note ->
                     NoteRow(
                         note = note,
-                        onClick = { vm.openNote(note) },
-                        onLongClick = { actionTarget = note },
+                        selected = vm.selectedId == note.id,
+                        onClick = { if (note.isFolder) vm.openFolder(note) else vm.select(note) },
+                        onDoubleClick = { vm.editNote(note) },
+                        onLongClick = {
+                            vm.select(note)
+                            actionTarget = note
+                        },
                     )
                     HorizontalDivider()
                 }
@@ -346,15 +358,6 @@ fun TreeScreen(vm: AppViewModel) {
             },
         )
     }
-    if (showCreate) {
-        CreateDialog(
-            onDismiss = { showCreate = false },
-            onCreate = { title, folder ->
-                showCreate = false
-                vm.create(title, folder)
-            },
-        )
-    }
     actionTarget?.let { note ->
         ActionDialog(
             note = note,
@@ -365,13 +368,29 @@ fun TreeScreen(vm: AppViewModel) {
     }
 }
 
+@Composable
+private fun BarButton(text: String, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.defaultMinSize(minWidth = 40.dp, minHeight = 40.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp),
+    ) { Text(text, style = MaterialTheme.typography.titleLarge) }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NoteRow(note: NoteEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun NoteRow(
+    note: NoteEntity,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onDoubleClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)
+            .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -509,7 +528,20 @@ private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (Str
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
-    var title by remember(note.id) { mutableStateOf(note.title) }
+    var titleField by remember(note.id) { mutableStateOf(TextFieldValue(note.title)) }
+    val title = titleField.text
+    var titleFocused by remember(note.id) { mutableStateOf(false) }
+    val titleFocus = remember { FocusRequester() }
+    LaunchedEffect(note.id) {
+        // Новая пустая заметка: сразу ставим курсор в название.
+        if (note.title.isBlank() && note.body.isBlank()) {
+            titleFocused = true
+            try {
+                titleFocus.requestFocus()
+            } catch (_: Exception) {
+            }
+        }
+    }
     var bodyField by remember(note.id) { mutableStateOf(TextFieldValue(note.body)) }
     val body = bodyField.text
     var showReminderDialog by remember { mutableStateOf(false) }
@@ -530,7 +562,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     }
     BackHandler {
         vm.save(note.id, title, body)
-        vm.closeEditor()
+        vm.closeEditor(title, body)
     }
 
     Scaffold(
@@ -540,7 +572,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 navigationIcon = {
                     TextButton(onClick = {
                         vm.save(note.id, title, body)
-                        vm.closeEditor()
+                        vm.closeEditor(title, body)
                     }) { Text("←") }
                 },
             )
@@ -554,11 +586,14 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 .fillMaxSize(),
         ) {
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
+                value = titleField,
+                onValueChange = { titleField = it },
                 label = { Text("Название") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(titleFocus)
+                    .onFocusChanged { if (it.isFocused) titleFocused = true },
             )
             ReminderRow(note = note, onEdit = { showReminderDialog = true })
             OutlinedTextField(
@@ -568,7 +603,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(top = 8.dp, bottom = 8.dp),
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .onFocusChanged { if (it.isFocused) titleFocused = false },
             )
             if (snippets.isNotEmpty()) {
                 Row(
@@ -580,13 +616,24 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     snippets.forEach { sn ->
                         AssistChip(
                             onClick = {
-                                val text = expandSnippet(sn.text)
-                                val start = bodyField.selection.min
-                                val end = bodyField.selection.max
-                                bodyField = TextFieldValue(
-                                    bodyField.text.replaceRange(start, end, text),
-                                    TextRange(start + text.length),
-                                )
+                                // Вставляем туда, где сейчас курсор: в название или в текст.
+                                if (titleFocused) {
+                                    val text = expandSnippet(sn.text).replace("\r", "").replace("\n", " ")
+                                    val start = titleField.selection.min
+                                    val end = titleField.selection.max
+                                    titleField = TextFieldValue(
+                                        titleField.text.replaceRange(start, end, text),
+                                        TextRange(start + text.length),
+                                    )
+                                } else {
+                                    val text = expandSnippet(sn.text)
+                                    val start = bodyField.selection.min
+                                    val end = bodyField.selection.max
+                                    bodyField = TextFieldValue(
+                                        bodyField.text.replaceRange(start, end, text),
+                                        TextRange(start + text.length),
+                                    )
+                                }
                             },
                             label = { Text(sn.label, maxLines = 1) },
                             modifier = Modifier.padding(end = 8.dp),

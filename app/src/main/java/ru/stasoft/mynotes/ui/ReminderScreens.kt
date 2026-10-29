@@ -84,7 +84,7 @@ fun ReminderListScreen(vm: AppViewModel) {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { vm.openNote(note) }
+                        .clickable { vm.editNote(note) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     Text(note.displayTitle().ifBlank { "Без названия" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -98,7 +98,7 @@ fun ReminderListScreen(vm: AppViewModel) {
                     }
                     Row {
                         TextButton(onClick = { vm.acknowledge(note) }) { Text("Готово") }
-                        TextButton(onClick = { vm.openNote(note) }) { Text("Открыть") }
+                        TextButton(onClick = { vm.editNote(note) }) { Text("Открыть") }
                     }
                 }
                 HorizontalDivider()

@@ -356,6 +356,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     // ---------- навигация ----------
 
     fun openFolder(note: NoteEntity) {
+        selectedId = null
         query.value = ""
         folderId.value = note.id
         refreshPath()
@@ -363,6 +364,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun goToPathIndex(index: Int) {
         // index = -1 — корень
+        selectedId = null
         folderId.value = if (index < 0) null else path[index].id
         refreshPath()
     }
@@ -381,6 +383,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             return true
         }
         if (folderId.value == null) return false
+        selectedId = null
         folderId.value = path.getOrNull(path.size - 2)?.id
         refreshPath()
         return true
@@ -404,38 +407,105 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- записи ----------
 
-    fun create(title: String, isFolder: Boolean) {
+    /** Выбранная в списке запись (одиночный тап): на неё действуют кнопки панели. */
+    var selectedId by mutableStateOf<Long?>(null)
+        private set
+
+    fun select(note: NoteEntity) {
+        selectedId = note.id
+    }
+
+    /** Запись, созданная в этой сессии редактора: если её оставили пустой, она удаляется при выходе. */
+    private data class Created(val id: Long, val parentId: Long?, val parentWasFolder: Boolean)
+
+    private var justCreated: Created? = null
+
+    /** Кнопка «+»: новая пустая заметка в текущей папке, сразу открывается редактор. */
+    fun newNote() {
         val dao = dao() ?: return
         val now = System.currentTimeMillis()
         viewModelScope.launch {
+            val parent = folderId.value
             val id = dao.insert(
-                NoteEntity(
-                    parentId = folderId.value,
-                    title = title.trim(),
-                    isFolder = isFolder,
-                    sortIndex = dao.maxSort(folderId.value) + 1,
-                    createdAt = now,
-                    updatedAt = now,
-                ),
+                NoteEntity(parentId = parent, sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now),
             )
-            if (!isFolder) dao.get(id)?.let {
+            justCreated = Created(id, parent, true)
+            selectedId = id
+            dao.get(id)?.let {
                 editing = it
                 loadChain(it)
             }
         }
     }
 
+    /**
+     * Кнопка «дочерняя заметка»: новая заметка внутри выбранной (она становится папкой).
+     * Если ничего не выбрано, создаётся пустая папка в текущем месте.
+     */
+    fun newChild() {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val sel = selectedId?.let { dao.get(it) }
+            val created: Created
+            val id: Long
+            if (sel == null) {
+                val parent = folderId.value
+                id = dao.insert(
+                    NoteEntity(parentId = parent, isFolder = true, sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now),
+                )
+                created = Created(id, parent, true)
+            } else {
+                id = dao.insert(
+                    NoteEntity(parentId = sel.id, sortIndex = dao.maxSort(sel.id) + 1, createdAt = now, updatedAt = now),
+                )
+                if (!sel.isFolder) dao.update(sel.copy(isFolder = true, updatedAt = now))
+                created = Created(id, sel.id, sel.isFolder)
+            }
+            justCreated = created
+            dao.get(id)?.let {
+                editing = it
+                loadChain(it)
+            }
+        }
+    }
+
+    /** Двойной тап — редактирование записи (в том числе папки). */
+    fun editNote(note: NoteEntity) {
+        justCreated = null
+        editing = note
+        loadChain(note)
+    }
+
     fun openNote(note: NoteEntity) {
         if (note.isFolder) {
             openFolder(note)
         } else {
-            editing = note
-            loadChain(note)
+            editNote(note)
         }
     }
 
-    fun closeEditor() {
+    /**
+     * Закрывает редактор. Если передать текущие [title] и [body] и запись создана только что и осталась пустой,
+     * она удаляется (чтобы не копились пустые заметки).
+     */
+    fun closeEditor(title: String? = null, body: String? = null) {
+        val dao = dao()
+        val cur = editing
+        val jc = justCreated
         editing = null
+        justCreated = null
+        if (dao == null || cur == null || jc == null || jc.id != cur.id) return
+        if (title == null || body == null || title.isNotBlank() || body.isNotBlank()) return
+        viewModelScope.launch {
+            val n = dao.get(jc.id) ?: return@launch
+            if (n.reminderAt != null || dao.childCount(n.id) > 0) return@launch
+            dao.delete(n)
+            val pid = jc.parentId
+            if (pid != null && !jc.parentWasFolder && dao.childCount(pid) == 0) {
+                dao.get(pid)?.let { dao.update(it.copy(isFolder = false)) }
+            }
+        }
     }
 
     fun save(id: Long, title: String, body: String) {
