@@ -90,6 +90,7 @@ fun AppRoot(vm: AppViewModel) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when {
             !vm.unlocked -> LockScreen(vm)
+            vm.props != null -> PropertiesScreen(vm, vm.props!!)
             vm.editing != null -> EditorScreen(vm, vm.editing!!)
             vm.showReminders -> ReminderListScreen(vm)
             else -> TreeScreen(vm)

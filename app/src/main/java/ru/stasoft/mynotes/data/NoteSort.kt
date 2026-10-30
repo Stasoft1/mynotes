@@ -12,11 +12,12 @@ fun NoteEntity.displayTitle(): String {
  * Применяет режим сортировки папки. Режим 0 — ручной порядок, список остаётся как есть.
  * В режимах автосортировки папки идут первыми (так выглядит ваша база; точный флаг из MyTreeNotes ещё не расшифрован).
  */
-fun sortNotes(list: List<NoteEntity>, mode: Int): List<NoteEntity> {
+fun sortNotes(list: List<NoteEntity>, mode: Int, foldersFirst: Boolean = true): List<NoteEntity> {
     if (mode <= 0) return list
     val byTitle = compareBy<NoteEntity> { it.displayTitle().lowercase() }
     val byTitleReversedText = compareBy<NoteEntity> { it.displayTitle().lowercase().reversed() }
-    val byCreated = compareBy<NoteEntity> { it.createdAt }
+    // В MyTreeNotes единственная дата записи — дата изменения, поэтому 7/8 сортируют по ней.
+    val byCreated = compareBy<NoteEntity> { it.updatedAt }
     // Напоминания: сначала записи с напоминанием по возрастанию даты, остальные в конце.
     val byReminder = Comparator<NoteEntity> { a, b ->
         val x = a.reminderAt
@@ -38,5 +39,6 @@ fun sortNotes(list: List<NoteEntity>, mode: Int): List<NoteEntity> {
         10 -> byReminder.reversed()
         else -> byTitle // 1, а также 5 и 6 (списки задач) пока как по названию
     }
-    return list.sortedWith(compareByDescending<NoteEntity> { it.isFolder }.then(cmp))
+    return if (foldersFirst) list.sortedWith(compareByDescending<NoteEntity> { it.isFolder }.then(cmp))
+    else list.sortedWith(cmp)
 }

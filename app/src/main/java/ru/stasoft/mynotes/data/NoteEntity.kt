@@ -47,4 +47,12 @@ data class NoteEntity(
     /** Сырые флаги и дополнительные данные из MyTreeNotes (иконки, цвета, теги), чтобы ничего не потерять. */
     val flags: Int = 0,
     val mapJson: String = "",
+    /** Цвет текста строки в списке (ARGB); фон — в [colorArgb]. */
+    val textColorArgb: Int? = null,
+    /** Запрет редактирования записи. */
+    val readOnly: Boolean = false,
+    /** Показывать папки сверху при автосортировке содержимого этой папки. */
+    val foldersFirst: Boolean = true,
+    /** Текст показывается как список задач (чекбоксы). */
+    val checklist: Boolean = false,
 )

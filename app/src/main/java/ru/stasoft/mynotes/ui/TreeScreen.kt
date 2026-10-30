@@ -36,6 +36,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -333,19 +335,29 @@ private fun NoteRow(
     onLongClick: () -> Unit,
 ) {
     val status = reminderStatus(note)
+    val textColor = note.textColorArgb?.let { Color(it) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else rowBackground(note) ?: Color.Transparent,
+            )
             .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
+        val vec = iconFor(note.iconKey)
+        if (vec != null) {
+            Icon(vec, null, tint = textColor ?: MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+        } else {
+            Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
+        }
         Column(Modifier.padding(start = 12.dp)) {
             Text(
                 note.displayTitle().ifBlank { "Без названия" },
                 style = MaterialTheme.typography.titleMedium,
+                color = textColor ?: Color.Unspecified,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -445,42 +457,52 @@ private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (Str
 }
 
 private val SORT_MODES = listOf(
-    0 to "Вручную (как в файле)",
-    1 to "По названию А → Я",
-    2 to "По названию Я → А",
-    7 to "По дате создания: старые сверху",
-    8 to "По дате создания: новые сверху",
-    9 to "По напоминанию: ближайшие сверху",
-    10 to "По напоминанию: дальние сверху",
+    0 to "Без сортировки",
+    1 to "По возрастанию",
+    2 to "По убыванию",
+    7 to "По возр. даты изменения",
+    8 to "По убыв. даты изменения",
+    9 to "По возр. дата события",
+    10 to "По убыв. дата события",
+    3 to "По возр., с конца строки",
+    4 to "По убыв., с конца строки",
 )
 
 @Composable
 private fun SortDialog(vm: AppViewModel, onDismiss: () -> Unit) {
-    val current by vm.sortMode.collectAsState()
+    val currentMode by vm.sortMode.collectAsState()
+    val currentFolders by vm.foldersFirst.collectAsState()
+    var mode by remember { mutableStateOf(currentMode) }
+    var folders by remember { mutableStateOf(currentFolders) }
+    val auto = mode != 0
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Сортировка папки") },
+        title = { Text("Сортировка") },
         text = {
             Column {
-                SORT_MODES.forEach { (mode, label) ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                vm.setSortMode(mode)
-                                onDismiss()
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = current == mode, onClick = {
-                            vm.setSortMode(mode)
-                            onDismiss()
-                        })
+                Text("Только текущая папка", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+                Row(Modifier.fillMaxWidth().clickable { mode = if (auto) 0 else 1 }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = auto, onCheckedChange = { mode = if (it) 1 else 0 })
+                    Text("Автоматическая")
+                }
+                Row(Modifier.fillMaxWidth().clickable { folders = !folders }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = folders, onCheckedChange = { folders = it })
+                    Text("Папки сверху")
+                }
+                SORT_MODES.forEach { (m, label) ->
+                    Row(Modifier.fillMaxWidth().clickable { mode = m }, verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = mode == m, onClick = { mode = m })
                         Text(label)
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = {
+            TextButton(onClick = {
+                vm.setSortMode(mode, folders)
+                onDismiss()
+            }) { Text("ОК") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }

@@ -61,18 +61,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Режим сортировки текущей папки (у корня — ручной). */
     val sortMode = MutableStateFlow(0)
+    val foldersFirst = MutableStateFlow(true)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val items: StateFlow<List<NoteEntity>> =
-        combine(dbFlow, folderId, query, sortMode) { db, fid, q, mode -> listOf(db, fid, q, mode) }
+        combine(dbFlow, folderId, query, sortMode, foldersFirst) { db, fid, q, mode, ff -> listOf(db, fid, q, mode, ff) }
             .flatMapLatest { args ->
                 val db = args[0] as AppDatabase?
                 val fid = args[1] as Long?
                 val q = args[2] as String
                 val mode = args[3] as Int
+                val ff = args[4] as Boolean
                 when {
                     db == null -> flowOf(emptyList())
-                    q.isBlank() -> db.notes().children(fid).map { sortNotes(it, mode) }
+                    q.isBlank() -> db.notes().children(fid).map { sortNotes(it, mode, ff) }
                     else -> db.notes().search(q.trim())
                 }
             }
@@ -181,6 +183,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 ),
             )
             if (editing?.id == noteId) editing = dao.get(noteId)
+            if (props?.id == noteId) props = dao.get(noteId)
         }
     }
 
@@ -330,7 +333,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Режим сортировки текущей папки (см. NoteEntity.sortMode). В корне — только ручной порядок. */
-    fun setSortMode(mode: Int) {
+    fun setSortMode(mode: Int, folders: Boolean = foldersFirst.value) {
         val dao = dao() ?: return
         val id = folderId.value
         if (id == null) {
@@ -339,9 +342,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             val f = dao.get(id) ?: return@launch
-            dao.update(f.copy(sortMode = mode))
+            dao.update(f.copy(sortMode = mode, foldersFirst = folders))
             sortMode.value = mode
-            path = path.map { if (it.id == id) it.copy(sortMode = mode) else it }
+            foldersFirst.value = folders
+            path = path.map { if (it.id == id) it.copy(sortMode = mode, foldersFirst = folders) else it }
         }
     }
 
@@ -353,9 +357,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         unlocked = false
         showReminders = false
         editing = null
+        props = null
         path = emptyList()
         folderId.value = null
         sortMode.value = 0
+        foldersFirst.value = true
         query.value = ""
         error = null
         if (db != null) viewModelScope.launch(Dispatchers.IO) { db.close() }
@@ -418,6 +424,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             path = chain.toList()
             sortMode.value = path.lastOrNull()?.sortMode ?: 0
+            foldersFirst.value = path.lastOrNull()?.foldersFirst ?: true
         }
     }
 
@@ -501,6 +508,31 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Двойной тап — редактирование записи (в том числе папки). */
+    /** Запись, чьи свойства открыты (поверх редактора). */
+    var props by mutableStateOf<NoteEntity?>(null)
+        private set
+
+    fun openProps(note: NoteEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch { props = dao.get(note.id) ?: note }
+    }
+
+    /** Сохраняет свойства и возвращает в редактор со свежими данными из базы. */
+    fun closeProps(change: ((NoteEntity) -> NoteEntity)?) {
+        val dao = dao()
+        val id = props?.id
+        props = null
+        if (dao == null || id == null) return
+        viewModelScope.launch {
+            val fresh = dao.get(id)
+            if (fresh != null && change != null) {
+                val n = change(fresh)
+                if (n != fresh) dao.update(n.copy(updatedAt = System.currentTimeMillis()))
+            }
+            editing = dao.get(id)
+        }
+    }
+
     fun editNote(note: NoteEntity) {
         justCreated = null
         editing = note

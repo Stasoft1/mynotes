@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -140,6 +141,10 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             TopStrip {
                 StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { close() }
                 StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
+                StripButton(Icons.Filled.Tune, "Свойства") {
+                    vm.save(note.id, title, body)
+                    vm.openProps(note)
+                }
             }
         },
     ) { padding ->
@@ -155,6 +160,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 placeholder = { Text("Название", style = MaterialTheme.typography.titleLarge) },
                 textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 singleLine = true,
+                readOnly = note.readOnly,
                 colors = flatFieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -168,6 +174,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 value = bodyField,
                 onValueChange = { bodyField = it },
                 placeholder = { Text("Текст") },
+                readOnly = note.readOnly,
                 colors = flatFieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
