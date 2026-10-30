@@ -97,6 +97,8 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     var showColors by remember { mutableStateOf(false) }
     var showReminder by remember { mutableStateOf(false) }
     var raw by remember { mutableStateOf(false) }
+    val legacy = effectiveIcon(note)
+    val shownKey: String? = if (iconKey == null) legacy else iconKey?.ifEmpty { null }
 
     fun close() {
         val ic = iconKey
@@ -131,7 +133,6 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             )
 
             SectionTitle("ИЗОБРАЖЕНИЕ ИЛИ ИКОНКА")
-            val shownKey = if (iconKey == null) effectiveIcon(note) else iconKey?.ifEmpty { null }
             PropRow(
                 "Название иконки",
                 shownKey ?: "Не выбрана",
