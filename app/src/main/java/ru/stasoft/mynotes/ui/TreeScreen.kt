@@ -347,10 +347,8 @@ private fun NoteRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val vec = iconFor(note.iconKey)
-        if (vec != null) {
-            Icon(vec, null, tint = textColor ?: MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-        } else {
+        val shown = NoteIcon(effectiveIcon(note), textColor ?: MaterialTheme.colorScheme.primary, 28.dp)
+        if (!shown) {
             Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
         }
         Column(Modifier.padding(start = 12.dp)) {

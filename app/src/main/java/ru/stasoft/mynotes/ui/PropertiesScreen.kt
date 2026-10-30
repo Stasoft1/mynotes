@@ -131,15 +131,15 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             )
 
             SectionTitle("ИЗОБРАЖЕНИЕ ИЛИ ИКОНКА")
+            val shownKey = if (iconKey == null) effectiveIcon(note) else iconKey?.ifEmpty { null }
             PropRow(
-                "Иконка",
-                if (iconKey == null) "Не выбрана" else "Выбрана",
+                "Название иконки",
+                shownKey ?: "Не выбрана",
                 onClick = { showIcons = true },
             ) {
-                val vec = iconFor(iconKey)
-                if (vec != null) Icon(vec, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-                if (iconKey != null) {
-                    IconButton(onClick = { iconKey = null }) { Icon(Icons.Filled.Delete, "Убрать иконку") }
+                if (shownKey != null) {
+                    NoteIcon(shownKey, MaterialTheme.colorScheme.primary, 32.dp)
+                    IconButton(onClick = { iconKey = "" }) { Icon(Icons.Filled.Delete, "Убрать иконку") }
                 }
             }
 
@@ -211,28 +211,45 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     }
 
     if (showIcons) {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        var search by remember { mutableStateOf("") }
+        val all = remember { Mdi.names(ctx) }
+        val list = remember(search, all) {
+            val q = search.trim().lowercase()
+            if (q.isEmpty()) MDI_POPULAR.filter { all.contains(it) }
+            else all.filter { it.contains(q) }.take(300)
+        }
         AlertDialog(
             onDismissRequest = { showIcons = false },
             title = { Text("Из набора иконок") },
             text = {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(48.dp),
-                    modifier = Modifier.height(360.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(ICON_CATALOG) { (key, vec) ->
-                        Box(
-                            Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(if (key == iconKey) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                                .clickable {
-                                    iconKey = key
-                                    showIcons = false
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(vec, key, tint = MaterialTheme.colorScheme.primary)
+                Column {
+                    TextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        placeholder = { Text("Поиск по названию (англ.), например car") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(52.dp),
+                        modifier = Modifier.padding(top = 8.dp).height(320.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(list) { key ->
+                            Box(
+                                Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
+                                    .background(if (key == shownKey) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable {
+                                        iconKey = key
+                                        showIcons = false
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                MdiIcon(key, MaterialTheme.colorScheme.primary, 30.dp)
+                            }
                         }
                     }
                 }
