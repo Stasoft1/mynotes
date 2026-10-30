@@ -60,7 +60,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val query = MutableStateFlow("")
 
     /** Режим сортировки текущей папки (у корня — ручной). */
-    private val sortMode = MutableStateFlow(0)
+    val sortMode = MutableStateFlow(0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val items: StateFlow<List<NoteEntity>> =
@@ -329,6 +329,22 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         message = "Вход по отпечатку выключен"
     }
 
+    /** Режим сортировки текущей папки (см. NoteEntity.sortMode). В корне — только ручной порядок. */
+    fun setSortMode(mode: Int) {
+        val dao = dao() ?: return
+        val id = folderId.value
+        if (id == null) {
+            message = "Корень сортируется вручную. Откройте папку, чтобы выбрать сортировку"
+            return
+        }
+        viewModelScope.launch {
+            val f = dao.get(id) ?: return@launch
+            dao.update(f.copy(sortMode = mode))
+            sortMode.value = mode
+            path = path.map { if (it.id == id) it.copy(sortMode = mode) else it }
+        }
+    }
+
     fun lock() {
         val db = dbFlow.value
         reminderJob?.cancel()
@@ -467,6 +483,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 editing = it
                 loadChain(it)
             }
+        }
+    }
+
+    /** Кнопка «Редактировать»: правка выделенной записи (заметки или папки). */
+    fun editSelected() {
+        val dao = dao() ?: return
+        val id = selectedId
+        if (id == null) {
+            message = "Сначала выберите запись: коснитесь её"
+            return
+        }
+        viewModelScope.launch {
+            val n = dao.get(id)
+            if (n == null) message = "Запись не найдена" else editNote(n)
         }
     }
 

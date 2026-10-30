@@ -21,13 +21,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ru.stasoft.mynotes.data.SnippetEntity
 
-/** Управление быстрыми вставками текущей папки (в корне — общие вставки для всех папок). */
+/**
+ * Управление шаблонами (быстрыми вставками). В корне — общие шаблоны для всех папок; в папке — свои,
+ * а общие и шаблоны папок выше по дереву тоже доступны (наследуются) и показаны здесь.
+ */
 @Composable
 fun SnippetsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
     val all by vm.allSnippets.collectAsState()
     val folderId by vm.folderId.collectAsState()
-    val mine = all.filter { it.folderId == folderId }
+    val pathIds = vm.path.map { it.id }
+    val titleById = vm.path.associate { it.id to it.title.ifBlank { "папка" } }
+    val visible = all
+        .filter { sn -> sn.folderId == null || pathIds.contains(sn.folderId) }
+        .sortedWith(compareBy<SnippetEntity>({ sn -> sn.folderId?.let { pathIds.indexOf(it) } ?: -1 }, { it.sortIndex }, { it.id }))
     var editId by remember { mutableStateOf<Long?>(null) }
     var label by remember { mutableStateOf("") }
     var text by remember { mutableStateOf("") }
@@ -35,39 +43,43 @@ fun SnippetsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Вставки: $where") },
+        title = { Text("Шаблоны: $where") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Кнопки над клавиатурой в редакторе. Вставки папки работают и во всех вложенных папках. " +
-                        "В тексте можно использовать {сегодня}, {дата}, {время}.",
+                    "Кнопки над клавиатурой в редакторе. Шаблоны папки работают и во всех вложенных папках, " +
+                        "общие шаблоны доступны везде. В тексте можно использовать {сегодня}, {дата}, {время}.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (mine.isEmpty()) {
-                    Text("Здесь своих вставок пока нет.", modifier = Modifier.padding(vertical = 8.dp))
+                if (visible.isEmpty()) {
+                    Text("Шаблонов пока нет.", modifier = Modifier.padding(vertical = 8.dp))
                 }
-                mine.forEach { s ->
+                visible.forEach { s ->
+                    val own = s.folderId == folderId
                     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text(
-                            s.label,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        TextButton(onClick = {
-                            editId = s.id
-                            label = s.label
-                            text = s.text
-                        }) { Text("Изменить") }
-                        TextButton(onClick = {
-                            vm.deleteSnippet(s)
-                            if (editId == s.id) {
-                                editId = null
-                                label = ""
-                                text = ""
+                        Column(Modifier.weight(1f)) {
+                            Text(s.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (!own) {
+                                val from = if (s.folderId == null) "общий" else "из «${titleById[s.folderId] ?: "папки"}»"
+                                Text(from, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }) { Text("Удалить") }
+                        }
+                        if (own) {
+                            TextButton(onClick = {
+                                editId = s.id
+                                label = s.label
+                                text = s.text
+                            }) { Text("Изменить") }
+                            TextButton(onClick = {
+                                vm.deleteSnippet(s)
+                                if (editId == s.id) {
+                                    editId = null
+                                    label = ""
+                                    text = ""
+                                }
+                            }) { Text("Удалить") }
+                        }
                     }
                     HorizontalDivider()
                 }
@@ -93,7 +105,7 @@ fun SnippetsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                             text = ""
                         }
                     },
-                ) { Text(if (editId == null) "Добавить вставку" else "Сохранить изменения") }
+                ) { Text(if (editId == null) "Добавить шаблон" else "Сохранить изменения") }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
