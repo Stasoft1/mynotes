@@ -14,18 +14,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AssistChip
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -86,6 +88,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     val titleHistory = remember(note.id) { TextHistory(titleField) }
     val bodyHistory = remember(note.id) { TextHistory(bodyField) }
     var showReminderDialog by remember { mutableStateOf(false) }
+    var showTemplates by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(note.id) {
@@ -140,6 +143,25 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         topBar = {
             TopStrip {
                 StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { close() }
+                Box {
+                    StripButton(Icons.Filled.Bookmarks, "Шаблоны") { showTemplates = true }
+                    DropdownMenu(expanded = showTemplates, onDismissRequest = { showTemplates = false }) {
+                        if (snippets.isEmpty()) {
+                            DropdownMenuItem(text = { Text("Шаблонов нет") }, onClick = { showTemplates = false }, enabled = false)
+                        }
+                        snippets.forEach { sn ->
+                            DropdownMenuItem(
+                                text = { Text(sn.label, maxLines = 2) },
+                                enabled = !note.readOnly,
+                                onClick = {
+                                    showTemplates = false
+                                    // Вставляем туда, где сейчас курсор: в название или в текст.
+                                    setCurrent(current().replaceSelection(expandSnippet(sn.text)))
+                                },
+                            )
+                        }
+                    }
+                }
                 StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
                 StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.save(note.id, title, body)
@@ -214,25 +236,6 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     if (!titleFocused) {
                         TextButton(onClick = { setCurrent(current().deleteLine()) }) { Text("Удалить строку") }
                         TextButton(onClick = { setCurrent(current().duplicateLine()) }) { Text("Дублировать строку") }
-                    }
-                }
-                if (snippets.isNotEmpty()) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        snippets.forEach { sn ->
-                            AssistChip(
-                                onClick = {
-                                    // Вставляем туда, где сейчас курсор: в название или в текст.
-                                    setCurrent(current().replaceSelection(expandSnippet(sn.text)))
-                                },
-                                label = { Text(sn.label, maxLines = 1) },
-                                modifier = Modifier.padding(end = 8.dp),
-                            )
-                        }
                     }
                 }
             }
