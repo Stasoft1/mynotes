@@ -219,6 +219,25 @@ fun TreeScreen(vm: AppViewModel) {
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            vm.clip?.let { c ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        (if (c.move) "Перенос: " else "Копирование: ") + "«${c.title}»",
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = { vm.pasteHere() }) { Text("Вставить сюда") }
+                    TextButton(onClick = { vm.cancelClip() }) { Text("Отмена") }
+                }
+            }
             if (vm.path.isNotEmpty() && query.isBlank()) {
                 Text(
                     text = (listOf("Главная") + vm.path.map { it.title.ifBlank { "…" } }).joinToString(" › "),
@@ -338,6 +357,7 @@ fun TreeScreen(vm: AppViewModel) {
             onRename = { vm.rename(note, it) },
             onDelete = { vm.delete(note) },
             onFlatten = { toRoot -> vm.flattenFolder(note, toRoot) },
+            onClip = { move -> vm.startClip(note, move) },
         )
     }
     deleteTarget?.let { note ->
@@ -453,6 +473,7 @@ private fun ActionDialog(
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onFlatten: (toRoot: Boolean) -> Unit,
+    onClip: (move: Boolean) -> Unit,
 ) {
     var title by remember { mutableStateOf(note.title) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -487,6 +508,14 @@ private fun ActionDialog(
                     label = { Text("Название") },
                     singleLine = true,
                 )
+                TextButton(onClick = {
+                    onClip(true)
+                    onDismiss()
+                }) { Text("Переместить…") }
+                TextButton(onClick = {
+                    onClip(false)
+                    onDismiss()
+                }) { Text(if (note.isFolder) "Копировать папку со всем содержимым…" else "Копировать…") }
                 if (note.isFolder) {
                     TextButton(onClick = {
                         onFlatten(false)

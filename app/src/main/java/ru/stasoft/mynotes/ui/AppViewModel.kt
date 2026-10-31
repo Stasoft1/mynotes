@@ -689,6 +689,94 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- копирование и перенос ----------
+
+    /** Запись, выбранная для переноса или копирования; вставляется кнопкой «Вставить сюда». */
+    data class Clip(val id: Long, val title: String, val move: Boolean)
+
+    var clip by mutableStateOf<Clip?>(null)
+        private set
+
+    fun startClip(note: NoteEntity, move: Boolean) {
+        clip = Clip(note.id, note.title.ifBlank { note.body.lineSequence().firstOrNull().orEmpty().take(40) }.ifBlank { "Без названия" }, move)
+    }
+
+    fun cancelClip() {
+        clip = null
+    }
+
+    /** Вставляет выбранную запись (папку — со всем содержимым) в открытую сейчас папку. */
+    fun pasteHere() {
+        val c = clip ?: return
+        val db = dbFlow.value ?: return
+        val target = folderId.value
+        viewModelScope.launch {
+            try {
+                val dao = db.notes()
+                var cur = target
+                while (cur != null) {
+                    if (cur == c.id) {
+                        message = "Нельзя вставить папку внутрь самой себя"
+                        return@launch
+                    }
+                    cur = dao.get(cur)?.parentId
+                }
+                val src = dao.get(c.id)
+                if (src == null) {
+                    message = "Исходная запись не найдена"
+                    clip = null
+                    return@launch
+                }
+                var resultId = src.id
+                if (c.move) {
+                    if (src.parentId == target) {
+                        message = "Запись уже лежит в этой папке"
+                        clip = null
+                        return@launch
+                    }
+                    db.withTransaction {
+                        dao.update(src.copy(parentId = target, sortIndex = dao.maxSort(target) + 1))
+                        target?.let { t -> dao.get(t)?.let { if (!it.isFolder) dao.update(it.copy(isFolder = true)) } }
+                    }
+                    message = "Перемещено"
+                } else {
+                    val snippets = allSnippets.value
+                    val sameParent = src.parentId == target
+                    var count = 0
+                    suspend fun copyTree(n: NoteEntity, parent: Long?, pos: Int, top: Boolean): Long {
+                        val kids = if (n.isFolder) dao.children(n.id).first() else emptyList()
+                        val id = dao.insert(
+                            n.copy(
+                                id = 0,
+                                parentId = parent,
+                                sortIndex = pos,
+                                legacyId = null,
+                                // Напоминания у копии не дублируем, чтобы не приходили двойные уведомления.
+                                reminderAt = null,
+                                reminderDoneAt = null,
+                                title = if (top && sameParent) n.title + " (копия)" else n.title,
+                            ),
+                        )
+                        count++
+                        snippets.filter { it.folderId == n.id }.forEach { dao.insertSnippet(it.copy(id = 0, folderId = id)) }
+                        kids.forEachIndexed { i, k -> copyTree(k, id, i, false) }
+                        return id
+                    }
+                    db.withTransaction {
+                        resultId = copyTree(src, target, dao.maxSort(target) + 1, true)
+                        target?.let { t -> dao.get(t)?.let { if (!it.isFolder) dao.update(it.copy(isFolder = true)) } }
+                    }
+                    message = "Скопировано записей: $count"
+                }
+                clip = null
+                selectedId = resultId
+                scrollTick++
+            } catch (e: Exception) {
+                message = "Не получилось: ${e.message}"
+            }
+        }
+    }
+
     fun delete(note: NoteEntity) {
         val dao = dao() ?: return
         viewModelScope.launch { dao.delete(note) }
