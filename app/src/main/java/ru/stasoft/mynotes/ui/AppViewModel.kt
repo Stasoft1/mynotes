@@ -32,6 +32,7 @@ import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
+import ru.stasoft.mynotes.data.ReadingIssue
 import ru.stasoft.mynotes.data.VarDef
 import ru.stasoft.mynotes.data.computeNumbers
 import ru.stasoft.mynotes.data.parseVars
@@ -556,6 +557,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
         }
         return result
+    }
+
+    /** Проверка показаний поля [field] внутри текущей папки (в корне — по всей базе). */
+    suspend fun checkReadings(field: String): List<ReadingIssue> {
+        val dao = dao() ?: return emptyList()
+        val rows = dao.titleRows()
+        val scope = folderId.value
+        return withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.checkReadings(rows, scope, field) }
+    }
+
+    /** Открыть заметку по id (из списка проверки). */
+    fun openById(id: Long) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.get(id)?.let { editNote(it) } }
     }
 
     fun openProps(note: NoteEntity) {

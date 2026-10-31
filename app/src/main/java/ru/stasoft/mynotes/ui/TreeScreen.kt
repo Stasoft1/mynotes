@@ -36,6 +36,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import ru.stasoft.mynotes.data.formatNumber
+import androidx.compose.foundation.layout.heightIn
+import ru.stasoft.mynotes.data.ReadingIssue
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
@@ -110,6 +113,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showBioSetup by remember { mutableStateOf(false) }
     var showSnippets by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
+    var showCheck by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -150,6 +154,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 showSort = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Проверка показаний…") },
+                            onClick = {
+                                menuOpen = false
+                                showCheck = true
                             },
                         )
                         DropdownMenuItem(
@@ -276,6 +287,7 @@ fun TreeScreen(vm: AppViewModel) {
 
     if (showSnippets) SnippetsDialog(vm, onDismiss = { showSnippets = false })
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
+    if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showBioSetup) {
         BioSetupDialog(
             onDismiss = { showBioSetup = false },
@@ -521,5 +533,74 @@ private fun SortDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             }) { Text("ОК") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+@Composable
+private fun ReadingCheckDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    var field by remember { mutableStateOf("Пробег") }
+    var issues by remember { mutableStateOf<List<ReadingIssue>?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Проверка показаний") },
+        text = {
+            Column {
+                Text(
+                    "Ищет показания, которые не вписываются в рост по датам в названиях папок: опечатки и пробег за день вместо показания. Проверяется текущая папка и вложенные.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = field,
+                    onValueChange = { field = it },
+                    label = { Text("Поле") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                val list = issues
+                if (busy) CircularProgressIndicator(Modifier.padding(top = 12.dp))
+                if (list != null) {
+                    Text(
+                        if (list.isEmpty()) "Всё в порядке: показания только растут." else "Подозрительных: ${list.size}",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                        items(list, key = { it.noteId }) { i ->
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onDismiss()
+                                        vm.openById(i.noteId)
+                                    }
+                                    .padding(vertical = 6.dp),
+                            ) {
+                                Text("${i.folderTitle}: ${formatNumber(i.value)}", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    i.noteTitle.ifBlank { "Без названия" } + (if (i.message.isNotEmpty()) " — ${i.message}" else ""),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && field.isNotBlank(),
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        issues = vm.checkReadings(field.trim().trimEnd(':'))
+                        busy = false
+                    }
+                },
+            ) { Text("Проверить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
 }
