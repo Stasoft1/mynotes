@@ -97,6 +97,8 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     var showColors by remember { mutableStateOf(false) }
     var showReminder by remember { mutableStateOf(false) }
     var raw by remember { mutableStateOf(false) }
+    var numeric by remember(note.id) { mutableStateOf(note.numeric) }
+    var numField by remember(note.id) { mutableStateOf(note.numericField) }
     val legacy = effectiveIcon(note)
     val shownKey: String? = if (iconKey == null) legacy else iconKey?.ifEmpty { null }
 
@@ -107,8 +109,10 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
         val cl = checklist
         val ro = readOnly
         val tg = tags
+        val nm = numeric
+        val nf = numField.trim()
         vm.closeProps { n ->
-            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim())
+            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim(), numeric = nm, numericField = nf)
         }
     }
     BackHandler { close() }
@@ -171,6 +175,35 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                 Checkbox(checked = checklist, onCheckedChange = { checklist = it })
             }
             HorizontalDivider()
+            if (note.isFolder) {
+                PropRow(
+                    "Числовые значения",
+                    "Суммировать числа заметок этой папки и вложенных в её строке",
+                    onClick = { numeric = !numeric },
+                ) { Checkbox(checked = numeric, onCheckedChange = { numeric = it }) }
+                if (numeric) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        TextField(
+                            value = numField,
+                            onValueChange = { numField = it },
+                            label = { Text("Поле с числом, например Сумма") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Пусто — число берётся из первой строки заметки, как в MyTreeNotes. " +
+                                "Заполнено — из строки «Поле: число».",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                HorizontalDivider()
+            }
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("Теги", style = MaterialTheme.typography.titleMedium)
                 TextField(

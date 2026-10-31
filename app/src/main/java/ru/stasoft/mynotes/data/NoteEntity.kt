@@ -55,4 +55,8 @@ data class NoteEntity(
     val foldersFirst: Boolean = true,
     /** Текст показывается как список задач (чекбоксы). */
     val checklist: Boolean = false,
+    /** «Числовые значения»: числа в заметках этой папки (и вложенных) суммируются в её строке. */
+    val numeric: Boolean = false,
+    /** Откуда брать число: пусто — первая строка заметки, иначе название поля («Сумма»). */
+    val numericField: String = "",
 )

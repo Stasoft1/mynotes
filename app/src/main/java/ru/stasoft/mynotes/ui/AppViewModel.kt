@@ -32,6 +32,7 @@ import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
+import ru.stasoft.mynotes.data.computeNumbers
 import ru.stasoft.mynotes.data.sortNotes
 import ru.stasoft.mynotes.importer.MtntImporter
 
@@ -79,6 +80,23 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Суммы «числовых значений» по записям (см. computeNumbers). */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val numbers: StateFlow<Map<Long, Double>> =
+        dbFlow
+            .flatMapLatest { db ->
+                if (db == null) flowOf(emptyMap())
+                else db.notes().changeStamp().map {
+                    try {
+                        val rows = db.notes().numRows()
+                        withContext(Dispatchers.Default) { computeNumbers(rows) }
+                    } catch (_: Exception) {
+                        emptyMap()
+                    }
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private var backgroundedAt = 0L
 

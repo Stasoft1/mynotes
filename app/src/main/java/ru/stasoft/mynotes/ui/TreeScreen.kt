@@ -70,6 +70,7 @@ import kotlinx.coroutines.launch
 import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
+import ru.stasoft.mynotes.data.formatNumber
 
 private val BarColor = Color(0xFF1B2330)
 
@@ -97,6 +98,7 @@ fun StripButton(icon: ImageVector, description: String, onClick: () -> Unit) {
 @Composable
 fun TreeScreen(vm: AppViewModel) {
     val items by vm.items.collectAsState()
+    val numbers by vm.numbers.collectAsState()
     val query by vm.query.collectAsState()
     val folderId by vm.folderId.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -228,13 +230,21 @@ fun TreeScreen(vm: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.FolderOpen, contentDescription = null)
-                    Text(
-                        cur.displayTitle().ifBlank { "Без названия" },
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 12.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(
+                            cur.displayTitle().ifBlank { "Без названия" },
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        numbers[cur.id]?.let {
+                            Text(
+                                formatNumber(it),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
             if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(16.dp))
@@ -249,6 +259,7 @@ fun TreeScreen(vm: AppViewModel) {
                 items(items, key = { it.id }) { note ->
                     NoteRow(
                         note = note,
+                        number = numbers[note.id],
                         selected = vm.selectedId == note.id,
                         onClick = { if (note.isFolder) vm.openFolder(note) else vm.select(note) },
                         onDoubleClick = { vm.editNote(note) },
@@ -329,6 +340,7 @@ fun TreeScreen(vm: AppViewModel) {
 @Composable
 private fun NoteRow(
     note: NoteEntity,
+    number: Double?,
     selected: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -366,6 +378,12 @@ private fun NoteRow(
                     color = if (status.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
                 Text(status.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (number != null) {
+                Text(
+                    formatNumber(number),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else if (!note.isFolder && note.body.isNotBlank()) {
                 Text(
                     note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
