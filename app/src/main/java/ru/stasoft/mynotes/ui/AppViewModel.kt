@@ -669,19 +669,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { dao.update(note.copy(title = title.trim(), updatedAt = System.currentTimeMillis())) }
     }
 
-    /** Выносит содержимое папки на уровень выше (в корень, если папка лежит в корне) и удаляет пустую папку. */
-    fun flattenFolder(folder: NoteEntity) {
+    /** Выносит содержимое папки на уровень выше или в корень базы и удаляет опустевшую папку. */
+    fun flattenFolder(folder: NoteEntity, toRoot: Boolean = false) {
         val db = dbFlow.value ?: return
         viewModelScope.launch {
             try {
                 db.withTransaction {
                     val dao = db.notes()
                     val kids = dao.children(folder.id).first()
-                    var pos = dao.maxSort(folder.parentId) + 1
-                    kids.forEach { k -> dao.update(k.copy(parentId = folder.parentId, sortIndex = pos++)) }
+                    val target = if (toRoot) null else folder.parentId
+                    var pos = dao.maxSort(target) + 1
+                    kids.forEach { k -> dao.update(k.copy(parentId = target, sortIndex = pos++)) }
                     dao.get(folder.id)?.let { dao.delete(it) }
                 }
-                message = "Содержимое папки перенесено наверх"
+                message = if (toRoot) "Содержимое папки перенесено в корень" else "Содержимое папки перенесено наверх"
             } catch (e: Exception) {
                 message = "Не удалось перенести: ${e.message}"
             }

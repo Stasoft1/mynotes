@@ -337,7 +337,7 @@ fun TreeScreen(vm: AppViewModel) {
             onDismiss = { actionTarget = null },
             onRename = { vm.rename(note, it) },
             onDelete = { vm.delete(note) },
-            onFlatten = { vm.flattenFolder(note) },
+            onFlatten = { toRoot -> vm.flattenFolder(note, toRoot) },
         )
     }
     deleteTarget?.let { note ->
@@ -452,7 +452,7 @@ private fun ActionDialog(
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
-    onFlatten: () -> Unit,
+    onFlatten: (toRoot: Boolean) -> Unit,
 ) {
     var title by remember { mutableStateOf(note.title) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -480,12 +480,26 @@ private fun ActionDialog(
         onDismissRequest = onDismiss,
         title = { Text("Действия") },
         text = {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Название") },
-                singleLine = true,
-            )
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Название") },
+                    singleLine = true,
+                )
+                if (note.isFolder) {
+                    TextButton(onClick = {
+                        onFlatten(false)
+                        onDismiss()
+                    }) { Text("Вынести содержимое наверх") }
+                    if (note.parentId != null) {
+                        TextButton(onClick = {
+                            onFlatten(true)
+                            onDismiss()
+                        }) { Text("Вынести содержимое в корень") }
+                    }
+                }
+            }
         },
         confirmButton = {
             TextButton(onClick = {
@@ -495,12 +509,6 @@ private fun ActionDialog(
         },
         dismissButton = {
             Row {
-                if (note.isFolder) {
-                    TextButton(onClick = {
-                        onFlatten()
-                        onDismiss()
-                    }) { Text("Вынести наверх") }
-                }
                 TextButton(onClick = { confirmDelete = true }) { Text("Удалить") }
                 TextButton(onClick = onDismiss) { Text("Отмена") }
             }
