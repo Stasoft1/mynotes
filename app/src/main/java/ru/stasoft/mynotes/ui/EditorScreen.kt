@@ -16,6 +16,9 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.CheckBox
 import ru.stasoft.mynotes.data.mapSpansForEdit
 import ru.stasoft.mynotes.data.applyStyle
 import ru.stasoft.mynotes.data.coveredValue
@@ -118,6 +121,15 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var showBgColor by remember { mutableStateOf(false) }
     var showSizes by remember { mutableStateOf(false) }
     val spansJson = spansToJson(spans)
+    // Режим списка задач: пункты строятся из текущего текста при включении режима.
+    val checklist = remember(note.id, note.checklist) { ChecklistState(bodyField.text) }
+    if (note.checklist) {
+        val serialized = checklist.serialized
+        LaunchedEffect(serialized) {
+            if (serialized != bodyField.text) bodyField = TextFieldValue(serialized)
+            if (spans.isNotEmpty()) spans = emptyList()
+        }
+    }
     val title = titleField.text
     val body = bodyField.text
     var titleFocused by remember(note.id) { mutableStateOf(false) }
@@ -179,6 +191,13 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         while (sfx < max - p && a[a.length - 1 - sfx] == b[b.length - 1 - sfx]) sfx++
         val removed = a.length - p - sfx
         val inserted = b.length - p - sfx
+        if (removed == 0 && inserted == 1 && b[p] == '\n' && !titleFocused) {
+            val cont = continueList(a, p)
+            if (cont != null) {
+                updateBody(cont)
+                return
+            }
+        }
         val base = styleAt(spans, if (removed > 0) p + 1 else p)
         val typing = HashMap<String, String?>()
         for (k in SpanKind.CHAR_KINDS) typing[k] = base[k]
@@ -258,7 +277,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                                                 values[id]?.firstOrNull { it.first.equals(name, ignoreCase = true) }?.second
                                             }
                                         }
-                                        setCurrent(current().replaceSelection(text))
+                                        if (note.checklist) checklist.addLines(text)
+                                        else setCurrent(current().replaceSelection(text))
                                     }
                                 },
                             )
@@ -266,6 +286,10 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     }
                 }
                 StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
+                StripButton(Icons.Filled.CheckBox, if (note.checklist) "Обычный текст" else "Список задач") {
+                    vm.save(note.id, title, body, if (note.checklist) null else "")
+                    vm.setChecklist(note.id, !note.checklist)
+                }
                 StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.save(note.id, title, body, spansJson)
                     vm.openProps(note)
@@ -295,7 +319,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             if (note.reminderAt != null) {
                 ReminderRow(note = note, onEdit = { showReminderDialog = true })
             }
-            TextField(
+            if (note.checklist) {
+                ChecklistBody(checklist, note.readOnly, Modifier.fillMaxWidth().weight(1f))
+            } else TextField(
                 value = bodyField,
                 onValueChange = { updateBody(it) },
                 visualTransformation = remember(spans) { SpanTransformation(spans) },
@@ -307,7 +333,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .weight(1f)
                     .onFocusChanged { if (it.isFocused) titleFocused = false },
             )
-            Column(
+            if (!note.checklist) Column(
                 Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceContainer),
@@ -337,6 +363,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                         FmtButton(Icons.Filled.FormatAlignLeft, "По левому краю", false) { alignLines(null) }
                         FmtButton(Icons.Filled.FormatAlignCenter, "По центру", false) { alignLines("c") }
                         FmtButton(Icons.Filled.FormatAlignRight, "По правому краю", false) { alignLines("r") }
+                        FmtButton(Icons.Filled.FormatListBulleted, "Маркированный список", false) { updateBody(bodyField.toggleBullet()) }
+                        FmtButton(Icons.Filled.FormatListNumbered, "Нумерованный список", false) { updateBody(bodyField.toggleNumbered()) }
                         FmtButton(Icons.Filled.FormatClear, "Сбросить оформление", false) { clearStyle() }
                     }
                 }

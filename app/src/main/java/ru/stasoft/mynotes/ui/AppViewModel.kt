@@ -66,8 +66,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val query = MutableStateFlow("")
 
     /** Режим сортировки текущей папки (у корня — ручной). */
-    val sortMode = MutableStateFlow(0)
-    val foldersFirst = MutableStateFlow(true)
+    // Сортировка корня хранится в настройках (у корня нет своей записи); у остальных папок — в самой папке.
+    private fun uiPrefs() = app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE)
+    private fun rootSort() = uiPrefs().getInt("root_sort", 0)
+    private fun rootFoldersFirst() = uiPrefs().getBoolean("root_folders_first", true)
+
+    val sortMode = MutableStateFlow(rootSort())
+    val foldersFirst = MutableStateFlow(rootFoldersFirst())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val items: StateFlow<List<NoteEntity>> =
@@ -355,12 +360,14 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         message = "Вход по отпечатку выключен"
     }
 
-    /** Режим сортировки текущей папки (см. NoteEntity.sortMode). В корне — только ручной порядок. */
+    /** Режим сортировки текущей папки (см. NoteEntity.sortMode); для корня сохраняется в настройках. */
     fun setSortMode(mode: Int, folders: Boolean = foldersFirst.value) {
         val dao = dao() ?: return
         val id = folderId.value
         if (id == null) {
-            message = "Корень сортируется вручную. Откройте папку, чтобы выбрать сортировку"
+            uiPrefs().edit().putInt("root_sort", mode).putBoolean("root_folders_first", folders).apply()
+            sortMode.value = mode
+            foldersFirst.value = folders
             return
         }
         viewModelScope.launch {
@@ -383,8 +390,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         props = null
         path = emptyList()
         folderId.value = null
-        sortMode.value = 0
-        foldersFirst.value = true
+        sortMode.value = rootSort()
+        foldersFirst.value = rootFoldersFirst()
         query.value = ""
         error = null
         if (db != null) viewModelScope.launch(Dispatchers.IO) { db.close() }
@@ -449,8 +456,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 cur = n.parentId
             }
             path = chain.toList()
-            sortMode.value = path.lastOrNull()?.sortMode ?: 0
-            foldersFirst.value = path.lastOrNull()?.foldersFirst ?: true
+            sortMode.value = path.lastOrNull()?.sortMode ?: rootSort()
+            foldersFirst.value = path.lastOrNull()?.foldersFirst ?: rootFoldersFirst()
         }
     }
 
@@ -588,6 +595,16 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             folderId.value = n.parentId
             refreshPath()
             editNote(n)
+        }
+    }
+
+    /** Включает или выключает режим списка задач у открытой записи. */
+    fun setChecklist(id: Long, on: Boolean) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val n = dao.get(id) ?: return@launch
+            dao.update(n.copy(checklist = on, spansJson = if (on) "" else n.spansJson))
+            if (editing?.id == id) editing = dao.get(id)
         }
     }
 

@@ -71,3 +71,51 @@ class TextHistory(initial: TextFieldValue) {
         return next
     }
 }
+
+private val NUMBERED = Regex("^\\d+\\. ")
+private const val BULLET = "• "
+
+private fun stripListPrefix(line: String): String =
+    if (line.startsWith(BULLET)) line.removePrefix(BULLET) else NUMBERED.replaceFirst(line, "")
+
+private fun TextFieldValue.mapLines(transform: (List<String>) -> List<String>): TextFieldValue {
+    val start = lineStart(selection.min)
+    val end = lineEnd(selection.max)
+    val block = transform(text.substring(start, end).split('\n')).joinToString("\n")
+    val newText = text.substring(0, start) + block + text.substring(end)
+    val sel = if (selection.collapsed) TextRange(start + block.length) else TextRange(start, start + block.length)
+    return TextFieldValue(newText, sel)
+}
+
+/** Маркированный список: ставит или снимает «• » у строк выделения. */
+fun TextFieldValue.toggleBullet(): TextFieldValue = mapLines { lines ->
+    if (lines.all { it.startsWith(BULLET) }) lines.map { it.removePrefix(BULLET) }
+    else lines.map { BULLET + stripListPrefix(it) }
+}
+
+/** Нумерованный список: ставит «1. », «2. » … или снимает нумерацию. */
+fun TextFieldValue.toggleNumbered(): TextFieldValue = mapLines { lines ->
+    if (lines.all { NUMBERED.containsMatchIn(it) }) lines.map { stripListPrefix(it) }
+    else lines.mapIndexed { i, l -> "${i + 1}. " + stripListPrefix(l) }
+}
+
+/**
+ * Если нажат Enter в строке списка, возвращает текст с продолжением списка (следующий маркер или номер),
+ * а на пустом пункте — с убранным маркером. Иначе null. [old] — текст до нажатия, [p] — позиция вставленного '\n'.
+ */
+fun continueList(old: String, p: Int): TextFieldValue? {
+    val ls = if (p <= 0) 0 else old.lastIndexOf('\n', p - 1) + 1
+    val line = old.substring(ls, p)
+    val bullet = line.startsWith(BULLET)
+    val num = NUMBERED.find(line)
+    if (!bullet && num == null) return null
+    val prefix = if (bullet) BULLET else num!!.value
+    if (line.length == prefix.length) {
+        // Пустой пункт: Enter завершает список.
+        val t = old.removeRange(ls, p) + ""
+        return TextFieldValue(t, TextRange(ls))
+    }
+    val next = if (bullet) BULLET else "${num!!.value.trim().trimEnd('.').toInt() + 1}. "
+    val newText = old.substring(0, p) + "\n" + next + old.substring(p)
+    return TextFieldValue(newText, TextRange(p + 1 + next.length))
+}
