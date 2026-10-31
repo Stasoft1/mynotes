@@ -117,6 +117,11 @@ private fun collect(node: Any?, keyPath: String, out: MutableList<Pair<String, S
 fun legacyIconName(ctx: Context, note: NoteEntity): String? {
     val raw = note.mapJson.trim()
     if (raw.isEmpty()) return null
+    try {
+        val first = JSONObject(raw).optJSONArray("icon")?.optString(0, "").orEmpty()
+        if (first.isNotEmpty() && Mdi.has(ctx, first)) return first
+    } catch (_: Exception) {
+    }
     val pairs = mutableListOf<Pair<String, String>>()
     try {
         collect(if (raw.startsWith("[")) JSONArray(raw) else JSONObject(raw), "", pairs)
@@ -137,5 +142,19 @@ fun effectiveIcon(note: NoteEntity): String? {
             "" -> null
             else -> note.iconKey
         }
+    }
+}
+
+/** Цвет иконки из импорта: map = {"icon":["monitor","#03A9F4"]}. Применяется только к иконке из импорта, не к выбранной вручную. */
+fun legacyIconColor(note: NoteEntity): Color? {
+    if (note.iconKey != null) return null
+    return try {
+        val arr = JSONObject(note.mapJson.trim()).optJSONArray("icon") ?: return null
+        val hex = arr.optString(1, "")
+        if (hex.startsWith("#") && (hex.length == 7 || hex.length == 9)) {
+            Color(android.graphics.Color.parseColor(hex))
+        } else null
+    } catch (_: Exception) {
+        null
     }
 }

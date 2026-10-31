@@ -139,7 +139,7 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                 onClick = { showIcons = true },
             ) {
                 if (shownKey != null) {
-                    NoteIcon(shownKey, MaterialTheme.colorScheme.primary, 32.dp)
+                    NoteIcon(shownKey, legacyIconColor(note)?.takeIf { iconKey == null } ?: MaterialTheme.colorScheme.primary, 32.dp)
                     IconButton(onClick = { iconKey = "" }) { Icon(Icons.Filled.Delete, "Убрать иконку") }
                 }
             }
