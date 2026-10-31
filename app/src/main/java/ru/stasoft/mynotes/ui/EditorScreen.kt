@@ -189,13 +189,21 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         while (p < max && a[p] == b[p]) p++
         var sfx = 0
         while (sfx < max - p && a[a.length - 1 - sfx] == b[b.length - 1 - sfx]) sfx++
-        val removed = a.length - p - sfx
-        val inserted = b.length - p - sfx
-        if (removed == 0 && inserted == 1 && b[p] == '\n' && !titleFocused) {
-            val cont = continueList(a, p)
-            if (cont != null) {
-                updateBody(cont)
-                return
+        var removed = a.length - p - sfx
+        var inserted = b.length - p - sfx
+        // Enter в конце строки перед другим переводом строки по тексту неоднозначен (куда вставлен '\n'),
+        // поэтому место берём по курсору: он стоит сразу после вставленного перевода строки.
+        val q = v.selection.start
+        if (v.selection.collapsed && b.length == a.length + 1 && q >= 1 && b[q - 1] == '\n' && b.removeRange(q - 1, q) == a) {
+            p = q - 1
+            removed = 0
+            inserted = 1
+            if (!titleFocused) {
+                val cont = continueList(a, p)
+                if (cont != null) {
+                    updateBody(cont)
+                    return
+                }
             }
         }
         val base = styleAt(spans, if (removed > 0) p + 1 else p)

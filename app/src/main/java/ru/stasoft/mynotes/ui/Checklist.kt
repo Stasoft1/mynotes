@@ -90,6 +90,7 @@ fun ChecklistBody(state: ChecklistState, readOnly: Boolean, modifier: Modifier =
                     }
                 }
             }
+            val textColor = if (item.checked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = item.checked,
@@ -102,11 +103,13 @@ fun ChecklistBody(state: ChecklistState, readOnly: Boolean, modifier: Modifier =
                     readOnly = readOnly,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         textDecoration = if (item.checked) TextDecoration.LineThrough else null,
-                        color = if (item.checked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        color = textColor,
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(onNext = { if (!readOnly) state.addAfter(items.indexOf(item)) }),
                     colors = TextFieldDefaults.colors(
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
