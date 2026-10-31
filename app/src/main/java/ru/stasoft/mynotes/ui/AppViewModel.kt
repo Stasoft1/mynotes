@@ -281,6 +281,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             unlocked = true
             error = null
             refreshPath()
+            resumeEditingId?.let { id ->
+                resumeEditingId = null
+                db.notes().get(id)?.let { n ->
+                    editing = n
+                    loadChain(n)
+                }
+            }
             startReminderSync(db)
             try {
                 withContext(Dispatchers.IO) { seedSnippetsOnce(db) }
@@ -379,20 +386,22 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Что была открыта на экране при блокировке: после входа возвращаем человека на то же место. */
+    private var resumeEditingId: Long? = null
+
     fun lock() {
         val db = dbFlow.value
         reminderJob?.cancel()
         reminderJob = null
+        resumeEditingId = props?.id ?: editing?.id ?: resumeEditingId
         dbFlow.value = null
         unlocked = false
-        showReminders = false
+        // Папка, выбор и поиск остаются, а тексты записей из памяти убираем: после входа они загрузятся заново.
         editing = null
         props = null
         path = emptyList()
-        folderId.value = null
         sortMode.value = rootSort()
         foldersFirst.value = rootFoldersFirst()
-        query.value = ""
         error = null
         if (db != null) viewModelScope.launch(Dispatchers.IO) { db.close() }
     }

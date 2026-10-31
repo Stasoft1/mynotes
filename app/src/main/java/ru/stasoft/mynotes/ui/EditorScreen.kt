@@ -64,6 +64,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -339,7 +344,19 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .onFocusChanged { if (it.isFocused) titleFocused = false },
+                    .onFocusChanged { if (it.isFocused) titleFocused = false }
+                    .onPreviewKeyEvent { ev ->
+                        // Enter в строке списка продолжает список (если клавиатура шлёт Enter как нажатие клавиши).
+                        if (ev.type == KeyEventType.KeyDown && (ev.key == Key.Enter || ev.key == Key.NumPadEnter) &&
+                            !note.readOnly && bodyField.selection.collapsed
+                        ) {
+                            val cont = continueList(bodyField.text, bodyField.selection.min)
+                            if (cont != null) {
+                                updateBody(cont)
+                                true
+                            } else false
+                        } else false
+                    },
             )
             if (!note.checklist) Column(
                 Modifier

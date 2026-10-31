@@ -36,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import ru.stasoft.mynotes.data.formatNumber
 import androidx.compose.foundation.layout.heightIn
@@ -298,9 +299,10 @@ fun TreeScreen(vm: AppViewModel) {
                 }
             }
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                items(items, key = { it.id }) { note ->
+                itemsIndexed(items, key = { _, n -> n.id }) { index, note ->
                     NoteRow(
                         note = note,
+                        zebra = index % 2 == 1,
                         number = numbers[note.id],
                         selected = vm.selectedId == note.id,
                         onClick = { if (note.isFolder) vm.openFolder(note) else vm.select(note) },
@@ -386,6 +388,7 @@ fun TreeScreen(vm: AppViewModel) {
 private fun NoteRow(
     note: NoteEntity,
     number: List<Pair<String, Double>>?,
+    zebra: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -398,7 +401,8 @@ private fun NoteRow(
             .fillMaxWidth()
             .background(
                 if (selected) MaterialTheme.colorScheme.secondaryContainer
-                else rowBackground(note) ?: Color.Transparent,
+                else rowBackground(note)
+                    ?: if (zebra) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) else Color.Transparent,
             )
             .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -414,20 +418,13 @@ private fun NoteRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (status != null && !status.done) {
-                Text(
-                    status.headline,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (status.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-                Text(status.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (number != null) {
+            if (number != null) {
                 Text(
                     formatValues(number),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else if (!note.isFolder && note.body.isNotBlank()) {
+            } else if (status == null && !note.isFolder && note.body.isNotBlank()) {
                 Text(
                     note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
@@ -435,6 +432,23 @@ private fun NoteRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            // Дата напоминания всегда подписана внизу записи, в том числе у выполненных.
+            if (status != null) {
+                if (status.done) {
+                    Text(
+                        "Выполнено · ${status.date}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        status.headline,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (status.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    )
+                    Text(status.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         NoteIcon(effectiveIcon(note), legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary, 28.dp)
