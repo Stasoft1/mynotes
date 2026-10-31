@@ -426,7 +426,7 @@ private fun VarsSection(
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(varLabel(def.name), style = MaterialTheme.typography.titleMedium)
-                Text("задана здесь", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (def.field.isNotEmpty()) "поле «${def.field}», задана здесь" else "задана здесь", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             AggPicker(def.agg) { picked -> onChange(own.map { if (it.name == def.name) it.copy(agg = picked) else it }) }
             IconButton(onClick = { onChange(own.filterNot { it.name == def.name }) }) { Icon(Icons.Filled.Delete, "Удалить") }
@@ -440,6 +440,7 @@ private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
     var name by remember { mutableStateOf("") }
     var agg by remember { mutableStateOf("sum") }
     var firstLine by remember { mutableStateOf(false) }
+    var field by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новая переменная") },
@@ -458,6 +459,15 @@ private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                if (!firstLine) {
+                    TextField(
+                        value = field,
+                        onValueChange = { field = it },
+                        label = { Text("Поле в тексте, если называется иначе") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
                 Text("Как сводить вверх по дереву", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
                 AggPicker(agg) { agg = it }
             }
@@ -465,7 +475,7 @@ private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
         confirmButton = {
             TextButton(
                 enabled = firstLine || name.isNotBlank(),
-                onClick = { onAdd(VarDef(if (firstLine) "" else name.trim().trimEnd(':'), agg)) },
+                onClick = { onAdd(VarDef(if (firstLine) "" else name.trim().trimEnd(':'), agg, field = if (firstLine) "" else field.trim().trimEnd(':'))) },
             ) { Text("Добавить") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },

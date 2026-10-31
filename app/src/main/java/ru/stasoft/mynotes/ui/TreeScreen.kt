@@ -71,6 +71,7 @@ import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
 import ru.stasoft.mynotes.data.formatValues
+import ru.stasoft.mynotes.data.resolveTitle
 
 private val BarColor = Color(0xFF1B2330)
 
@@ -232,7 +233,7 @@ fun TreeScreen(vm: AppViewModel) {
                     Icon(Icons.Filled.FolderOpen, contentDescription = null)
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(
-                            cur.displayTitle().ifBlank { "Без названия" },
+                            resolveTitle(cur.displayTitle(), numbers[cur.id]).ifBlank { "Без названия" },
                             style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -365,7 +366,7 @@ private fun NoteRow(
         }
         Column(Modifier.padding(start = 12.dp)) {
             Text(
-                note.displayTitle().ifBlank { "Без названия" },
+                resolveTitle(note.displayTitle(), number).ifBlank { "Без названия" },
                 style = MaterialTheme.typography.titleMedium,
                 color = textColor ?: Color.Unspecified,
                 maxLines = 1,

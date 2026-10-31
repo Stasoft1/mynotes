@@ -53,7 +53,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
-import ru.stasoft.mynotes.data.expandSnippet
+import ru.stasoft.mynotes.data.expandWithVars
+import kotlinx.coroutines.launch
 
 @Composable
 private fun flatFieldColors() = TextFieldDefaults.colors(
@@ -89,6 +90,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     val bodyHistory = remember(note.id) { TextHistory(bodyField) }
     var showReminderDialog by remember { mutableStateOf(false) }
     var showTemplates by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(note.id) {
@@ -156,7 +158,16 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                                 onClick = {
                                     showTemplates = false
                                     // Вставляем туда, где сейчас курсор: в название или в текст.
-                                    setCurrent(current().replaceSelection(expandSnippet(sn.text)))
+                                    scope.launch {
+                                        val vars = vm.inheritedVars(note).map { it.first }
+                                        val values = vm.numbers.value
+                                        val text = expandWithVars(sn.text, vars) { name ->
+                                            chain.firstNotNullOfOrNull { id ->
+                                                values[id]?.firstOrNull { it.first.equals(name, ignoreCase = true) }?.second
+                                            }
+                                        }
+                                        setCurrent(current().replaceSelection(text))
+                                    }
                                 },
                             )
                         }
