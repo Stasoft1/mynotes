@@ -655,12 +655,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun save(id: Long, title: String, body: String) {
+    fun save(id: Long, title: String, body: String, spans: String? = null) {
         val dao = dao() ?: return
         viewModelScope.launch {
             val cur = dao.get(id) ?: return@launch
-            if (cur.title == title && cur.body == body) return@launch
-            dao.update(cur.copy(title = title, body = body, updatedAt = System.currentTimeMillis()))
+            val sp = spans ?: cur.spansJson
+            if (cur.title == title && cur.body == body && cur.spansJson == sp) return@launch
+            dao.update(cur.copy(title = title, body = body, spansJson = sp, updatedAt = System.currentTimeMillis()))
         }
     }
 

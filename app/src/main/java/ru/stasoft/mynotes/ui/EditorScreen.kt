@@ -16,6 +16,24 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.ContentCopy
+import ru.stasoft.mynotes.data.mapSpansForEdit
+import ru.stasoft.mynotes.data.applyStyle
+import ru.stasoft.mynotes.data.coveredValue
+import ru.stasoft.mynotes.data.styleAt
+import ru.stasoft.mynotes.data.spansToJson
+import ru.stasoft.mynotes.data.parseSpans
+import ru.stasoft.mynotes.data.SpanKind
+import androidx.compose.material.icons.filled.FormatClear
+import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.StrikethroughS
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
@@ -73,6 +91,17 @@ private fun ToolButton(icon: ImageVector, description: String, onClick: () -> Un
     IconButton(onClick = onClick) { Icon(icon, contentDescription = description) }
 }
 
+@Composable
+private fun FmtButton(icon: ImageVector, description: String, active: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private fun singleLine(v: TextFieldValue): TextFieldValue =
     if (v.text.contains('\n') || v.text.contains('\r')) {
         v.copy(text = v.text.replace("\r", "").replace('\n', ' '))
@@ -82,6 +111,13 @@ private fun singleLine(v: TextFieldValue): TextFieldValue =
 fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var titleField by remember(note.id) { mutableStateOf(TextFieldValue(note.title)) }
     var bodyField by remember(note.id) { mutableStateOf(TextFieldValue(note.body)) }
+    var spans by remember(note.id) { mutableStateOf(parseSpans(note.spansJson, note.body.length)) }
+    // Переключатели оформления при курсоре без выделения: действуют на следующий набранный текст.
+    var pending by remember(note.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var showTextColor by remember { mutableStateOf(false) }
+    var showBgColor by remember { mutableStateOf(false) }
+    var showSizes by remember { mutableStateOf(false) }
+    val spansJson = spansToJson(spans)
     val title = titleField.text
     val body = bodyField.text
     var titleFocused by remember(note.id) { mutableStateOf(false) }
@@ -105,9 +141,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     }
 
     // Автосохранение и снимки для «Отменить» после паузы в наборе.
-    LaunchedEffect(note.id, title, body) {
+    LaunchedEffect(note.id, title, body, spansJson) {
         delay(600)
-        vm.save(note.id, title, body)
+        vm.save(note.id, title, body, spansJson)
     }
     LaunchedEffect(title) {
         delay(600)
@@ -119,15 +155,71 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     }
 
     fun close() {
-        vm.save(note.id, title, body)
+        vm.save(note.id, title, body, spansJson)
         vm.closeEditor(title, body)
     }
     BackHandler { close() }
 
     // Действия над тем полем, в котором сейчас курсор.
     fun current(): TextFieldValue = if (titleFocused) titleField else bodyField
+    // Любая правка текста тела проходит здесь: диапазоны оформления сдвигаются вслед за текстом.
+    fun updateBody(v: TextFieldValue) {
+        val old = bodyField
+        if (v.text == old.text) {
+            if (v.selection != old.selection) pending = emptyMap()
+            bodyField = v
+            return
+        }
+        val a = old.text
+        val b = v.text
+        val max = minOf(a.length, b.length)
+        var p = 0
+        while (p < max && a[p] == b[p]) p++
+        var sfx = 0
+        while (sfx < max - p && a[a.length - 1 - sfx] == b[b.length - 1 - sfx]) sfx++
+        val removed = a.length - p - sfx
+        val inserted = b.length - p - sfx
+        val base = styleAt(spans, if (removed > 0) p + 1 else p)
+        val typing = HashMap<String, String?>()
+        for (k in SpanKind.CHAR_KINDS) typing[k] = base[k]
+        for ((k, value) in pending) typing[k] = value
+        spans = mapSpansForEdit(spans, p, removed, inserted, typing)
+        pending = emptyMap()
+        bodyField = v
+    }
     fun setCurrent(v: TextFieldValue) {
-        if (titleFocused) titleField = singleLine(v) else bodyField = v
+        if (titleFocused) titleField = singleLine(v) else updateBody(v)
+    }
+
+    // Оформление: на выделение, а без выделения — на следующий набранный текст.
+    fun isActive(kind: String): Boolean {
+        val sel = bodyField.selection
+        return if (sel.collapsed) {
+            if (pending.containsKey(kind)) pending[kind] != null else styleAt(spans, sel.min)[kind] != null
+        } else coveredValue(spans, kind, sel.min, sel.max) != null
+    }
+    fun setStyle(kind: String, value: String?) {
+        val sel = bodyField.selection
+        if (sel.collapsed) pending = pending + (kind to value)
+        else spans = applyStyle(spans, sel.min, sel.max, kind, value)
+    }
+    fun toggleStyle(kind: String) = setStyle(kind, if (isActive(kind)) null else "1")
+    fun alignLines(value: String?) {
+        val t = bodyField.text
+        val sel = bodyField.selection
+        val ls = if (sel.min <= 0) 0 else t.lastIndexOf('\n', sel.min - 1) + 1
+        val nl = t.indexOf('\n', sel.max)
+        val end = if (nl < 0) t.length else nl + 1
+        if (end > ls) spans = applyStyle(spans, ls, end, SpanKind.ALIGN, value)
+    }
+    fun clearStyle() {
+        val sel = bodyField.selection
+        if (sel.collapsed) pending = SpanKind.CHAR_KINDS.associateWith { null }
+        else {
+            var out = spans
+            for (k in SpanKind.CHAR_KINDS) out = applyStyle(out, sel.min, sel.max, k, null)
+            spans = out
+        }
     }
     fun history(): TextHistory = if (titleFocused) titleHistory else bodyHistory
 
@@ -175,7 +267,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 }
                 StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
                 StripButton(Icons.Filled.Tune, "Свойства") {
-                    vm.save(note.id, title, body)
+                    vm.save(note.id, title, body, spansJson)
                     vm.openProps(note)
                 }
             }
@@ -205,7 +297,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             }
             TextField(
                 value = bodyField,
-                onValueChange = { bodyField = it },
+                onValueChange = { updateBody(it) },
+                visualTransformation = remember(spans) { SpanTransformation(spans) },
                 placeholder = { Text("Текст") },
                 readOnly = note.readOnly,
                 colors = flatFieldColors(),
@@ -219,6 +312,34 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceContainer),
             ) {
+                if (!titleFocused && !note.readOnly) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        FmtButton(Icons.Filled.FormatBold, "Жирный", isActive(SpanKind.BOLD)) { toggleStyle(SpanKind.BOLD) }
+                        FmtButton(Icons.Filled.FormatItalic, "Курсив", isActive(SpanKind.ITALIC)) { toggleStyle(SpanKind.ITALIC) }
+                        FmtButton(Icons.Filled.FormatUnderlined, "Подчёркнутый", isActive(SpanKind.UNDERLINE)) { toggleStyle(SpanKind.UNDERLINE) }
+                        FmtButton(Icons.Filled.StrikethroughS, "Зачёркнутый", isActive(SpanKind.STRIKE)) { toggleStyle(SpanKind.STRIKE) }
+                        FmtButton(Icons.Filled.FormatColorText, "Цвет текста", isActive(SpanKind.COLOR)) { showTextColor = true }
+                        FmtButton(Icons.Filled.FormatColorFill, "Цвет фона", isActive(SpanKind.BACKGROUND)) { showBgColor = true }
+                        Box {
+                            FmtButton(Icons.Filled.FormatSize, "Размер шрифта", isActive(SpanKind.SIZE)) { showSizes = true }
+                            DropdownMenu(expanded = showSizes, onDismissRequest = { showSizes = false }) {
+                                FONT_SIZES.forEach { (label, size) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            showSizes = false
+                                            setStyle(SpanKind.SIZE, size?.toString())
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        FmtButton(Icons.Filled.FormatAlignLeft, "По левому краю", false) { alignLines(null) }
+                        FmtButton(Icons.Filled.FormatAlignCenter, "По центру", false) { alignLines("c") }
+                        FmtButton(Icons.Filled.FormatAlignRight, "По правому краю", false) { alignLines("r") }
+                        FmtButton(Icons.Filled.FormatClear, "Сбросить оформление", false) { clearStyle() }
+                    }
+                }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                     ToolButton(Icons.AutoMirrored.Filled.Undo, "Отменить") {
                         history().undo(current())?.let { setCurrent(it) }
@@ -251,6 +372,27 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 }
             }
         }
+    }
+
+    if (showTextColor) {
+        ColorPickerDialog(
+            title = "Цвет текста",
+            onDismiss = { showTextColor = false },
+            onPick = { c ->
+                showTextColor = false
+                setStyle(SpanKind.COLOR, c?.toString())
+            },
+        )
+    }
+    if (showBgColor) {
+        ColorPickerDialog(
+            title = "Цвет фона",
+            onDismiss = { showBgColor = false },
+            onPick = { c ->
+                showBgColor = false
+                setStyle(SpanKind.BACKGROUND, c?.toString())
+            },
+        )
     }
 
     if (showReminderDialog) {

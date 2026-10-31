@@ -55,6 +55,8 @@ data class NoteEntity(
     val foldersFirst: Boolean = true,
     /** Текст показывается как список задач (чекбоксы). */
     val checklist: Boolean = false,
+    /** Оформление текста (жирный, цвет, размер, выравнивание…) отдельно от самого текста, см. Spans.kt. */
+    val spansJson: String = "",
     /** Переменные папки (JSON, см. Vars.kt): действуют на папку и все вложенные. */
     val varsJson: String = "",
     /** Устарело: заменено переменными (при обновлении базы перенесено в [varsJson]). */
