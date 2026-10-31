@@ -63,17 +63,17 @@ object MtntImporter {
         return roots
     }
 
-    /** Кладёт всё дерево в новую папку «Импорт …» в корне. Возвращает число импортированных записей. */
-    suspend fun importInto(db: AppDatabase, roots: List<Node>, folderTitle: String): Int {
+    /** Кладёт дерево в новую папку [folderTitle] в корне, а при null — прямо в корень базы, после имеющихся записей. Возвращает число импортированных записей. */
+    suspend fun importInto(db: AppDatabase, roots: List<Node>, folderTitle: String?): Int {
         var count = 0
         val now = System.currentTimeMillis()
         db.withTransaction {
             val dao = db.notes()
-            val rootId = dao.insert(
+            val rootId: Long? = if (folderTitle == null) null else dao.insert(
                 NoteEntity(title = folderTitle, isFolder = true, createdAt = now, updatedAt = now),
             )
             // position — место среди соседей: в MyTreeNotes порядок в файле и есть ручной порядок.
-            suspend fun add(node: Node, parentId: Long, position: Int) {
+            suspend fun add(node: Node, parentId: Long?, position: Int) {
                 val a = node.attrs
                 val created = parseTime(a["date"]) ?: now
                 val id = dao.insert(
@@ -100,7 +100,8 @@ object MtntImporter {
                 count++
                 node.children.forEachIndexed { i, child -> add(child, id, i) }
             }
-            roots.forEachIndexed { i, r -> add(r, rootId, i) }
+            val base = if (rootId == null) dao.maxSort(null) + 1 else 0
+            roots.forEachIndexed { i, r -> add(r, rootId, base + i) }
         }
         return count
     }

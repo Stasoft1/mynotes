@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -407,7 +409,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun goToPathIndex(index: Int) {
         // index = -1 — корень
-        selectedId = null
+        selectedId = path.getOrNull(index + 1)?.id
+        scrollTick++
         folderId.value = if (index < 0) null else path[index].id
         refreshPath()
     }
@@ -426,8 +429,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             return true
         }
         if (folderId.value == null) return false
-        selectedId = null
+        val left = folderId.value
         folderId.value = path.getOrNull(path.size - 2)?.id
+        selectedId = left
+        scrollTick++
         refreshPath()
         return true
     }
@@ -458,6 +463,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun select(note: NoteEntity) {
         selectedId = note.id
     }
+
+    /** Растёт, когда список должен прокрутиться к выбранной записи (после выхода из папки или заметки). */
+    var scrollTick by mutableStateOf(0)
+        private set
 
     /** Запись, созданная в этой сессии редактора: если её оставили пустой, она удаляется при выходе. */
     private data class Created(val id: Long, val parentId: Long?, val parentWasFolder: Boolean)
@@ -519,7 +528,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = dao() ?: return
         val id = selectedId
         if (id == null) {
-            message = "Сначала выберите запись: коснитесь её"
+            // Ничего не выбрано — действие относится к текущей папке (её строка выделена сверху).
+            val cur = path.lastOrNull()
+            if (cur == null) message = "Сначала выберите запись: коснитесь её" else editNote(cur)
             return
         }
         viewModelScope.launch {
@@ -570,7 +581,14 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Открыть заметку по id (из списка проверки). */
     fun openById(id: Long) {
         val dao = dao() ?: return
-        viewModelScope.launch { dao.get(id)?.let { editNote(it) } }
+        viewModelScope.launch {
+            val n = dao.get(id) ?: return@launch
+            // Переходим в папку заметки, чтобы после выхода из редактора она была на виду.
+            query.value = ""
+            folderId.value = n.parentId
+            refreshPath()
+            editNote(n)
+        }
     }
 
     fun openProps(note: NoteEntity) {
@@ -596,6 +614,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun editNote(note: NoteEntity) {
         justCreated = null
+        selectedId = note.id
         editing = note
         loadChain(note)
     }
@@ -616,6 +635,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = dao()
         val cur = editing
         val jc = justCreated
+        if (cur != null) {
+            selectedId = cur.id
+            scrollTick++
+        }
         editing = null
         justCreated = null
         if (dao == null || cur == null || jc == null || jc.id != cur.id) return
@@ -624,6 +647,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             val n = dao.get(jc.id) ?: return@launch
             if (n.reminderAt != null || dao.childCount(n.id) > 0) return@launch
             dao.delete(n)
+            if (selectedId == n.id) selectedId = null
             val pid = jc.parentId
             if (pid != null && !jc.parentWasFolder && dao.childCount(pid) == 0) {
                 dao.get(pid)?.let { dao.update(it.copy(isFolder = false)) }
@@ -645,6 +669,25 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { dao.update(note.copy(title = title.trim(), updatedAt = System.currentTimeMillis())) }
     }
 
+    /** Выносит содержимое папки на уровень выше (в корень, если папка лежит в корне) и удаляет пустую папку. */
+    fun flattenFolder(folder: NoteEntity) {
+        val db = dbFlow.value ?: return
+        viewModelScope.launch {
+            try {
+                db.withTransaction {
+                    val dao = db.notes()
+                    val kids = dao.children(folder.id).first()
+                    var pos = dao.maxSort(folder.parentId) + 1
+                    kids.forEach { k -> dao.update(k.copy(parentId = folder.parentId, sortIndex = pos++)) }
+                    dao.get(folder.id)?.let { dao.delete(it) }
+                }
+                message = "Содержимое папки перенесено наверх"
+            } catch (e: Exception) {
+                message = "Не удалось перенести: ${e.message}"
+            }
+        }
+    }
+
     fun delete(note: NoteEntity) {
         val dao = dao() ?: return
         viewModelScope.launch { dao.delete(note) }
@@ -663,7 +706,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                         ?: throw MtntImporter.ImportException("Не удалось открыть файл")
                     val roots = MtntImporter.parse(bytes)
                     val stamp = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-                    MtntImporter.importInto(db, roots, "Импорт MyTreeNotes $stamp")
+                    MtntImporter.importInto(db, roots, null)
                 }
                 message = "Импортировано записей: $count"
             } catch (e: MtntImporter.ImportException) {

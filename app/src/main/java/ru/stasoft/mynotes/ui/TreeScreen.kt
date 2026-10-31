@@ -36,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.lazy.rememberLazyListState
 import ru.stasoft.mynotes.data.formatNumber
 import androidx.compose.foundation.layout.heightIn
 import ru.stasoft.mynotes.data.ReadingIssue
@@ -267,7 +268,17 @@ fun TreeScreen(vm: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            LazyColumn(Modifier.fillMaxSize()) {
+            val listState = rememberLazyListState()
+            val target = vm.selectedId
+            val hasTarget = target != null && items.any { it.id == target }
+            LaunchedEffect(vm.scrollTick, hasTarget) {
+                val i = items.indexOfFirst { it.id == target }
+                if (hasTarget && i >= 0) {
+                    val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == i }
+                    if (!visible) listState.scrollToItem(i)
+                }
+            }
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 items(items, key = { it.id }) { note ->
                     NoteRow(
                         note = note,
@@ -326,6 +337,7 @@ fun TreeScreen(vm: AppViewModel) {
             onDismiss = { actionTarget = null },
             onRename = { vm.rename(note, it) },
             onDelete = { vm.delete(note) },
+            onFlatten = { vm.flattenFolder(note) },
         )
     }
     deleteTarget?.let { note ->
@@ -372,11 +384,9 @@ private fun NoteRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val shown = NoteIcon(effectiveIcon(note), legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary, 28.dp)
-        if (!shown) {
-            Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
-        }
-        Column(Modifier.padding(start = 12.dp)) {
+        // Слева всегда папка или заметка, чтобы их было видно сразу; своя иконка — справа, как в MyTreeNotes.
+        Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(
                 resolveTitle(note.displayTitle(), number).ifBlank { "Без названия" },
                 style = MaterialTheme.typography.titleMedium,
@@ -407,6 +417,7 @@ private fun NoteRow(
                 )
             }
         }
+        NoteIcon(effectiveIcon(note), legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary, 28.dp)
     }
 }
 
@@ -436,7 +447,13 @@ private fun BioSetupDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 }
 
 @Composable
-private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (String) -> Unit, onDelete: () -> Unit) {
+private fun ActionDialog(
+    note: NoteEntity,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+    onFlatten: () -> Unit,
+) {
     var title by remember { mutableStateOf(note.title) }
     var confirmDelete by remember { mutableStateOf(false) }
     if (confirmDelete) {
@@ -478,6 +495,12 @@ private fun ActionDialog(note: NoteEntity, onDismiss: () -> Unit, onRename: (Str
         },
         dismissButton = {
             Row {
+                if (note.isFolder) {
+                    TextButton(onClick = {
+                        onFlatten()
+                        onDismiss()
+                    }) { Text("Вынести наверх") }
+                }
                 TextButton(onClick = { confirmDelete = true }) { Text("Удалить") }
                 TextButton(onClick = onDismiss) { Text("Отмена") }
             }
