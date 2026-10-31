@@ -26,11 +26,11 @@ interface NoteDao {
     )
     fun withReminders(): Flow<List<NoteEntity>>
 
-    @Query("SELECT id, parentId, isFolder, numeric, numericField, substr(body, 1, 2000) AS head FROM notes")
+    @Query("SELECT id, parentId, isFolder, varsJson, substr(body, 1, 2000) AS head FROM notes")
     suspend fun numRows(): List<NumRow>
 
     /** Меняется при любой правке, добавлении и удалении записей: по нему пересчитываются суммы. */
-    @Query("SELECT COALESCE(MAX(updatedAt), 0) || ':' || COUNT(*) || ':' || COALESCE(SUM(numeric), 0) FROM notes")
+    @Query("SELECT COALESCE(MAX(updatedAt), 0) || ':' || COUNT(*) || ':' || COALESCE(SUM(LENGTH(varsJson)), 0) FROM notes")
     fun changeStamp(): Flow<String>
 
     @Query("SELECT COALESCE(MAX(sortIndex), -1) FROM notes WHERE parentId IS :parentId")

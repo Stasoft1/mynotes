@@ -32,7 +32,9 @@ import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
+import ru.stasoft.mynotes.data.VarDef
 import ru.stasoft.mynotes.data.computeNumbers
+import ru.stasoft.mynotes.data.parseVars
 import ru.stasoft.mynotes.data.sortNotes
 import ru.stasoft.mynotes.importer.MtntImporter
 
@@ -81,9 +83,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Суммы «числовых значений» по записям (см. computeNumbers). */
+    /** Значения переменных по записям (см. computeNumbers). */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val numbers: StateFlow<Map<Long, Double>> =
+    val numbers: StateFlow<Map<Long, List<Pair<String, Double>>>> =
         dbFlow
             .flatMapLatest { db ->
                 if (db == null) flowOf(emptyMap())
@@ -529,6 +531,32 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Запись, чьи свойства открыты (поверх редактора). */
     var props by mutableStateOf<NoteEntity?>(null)
         private set
+
+    /** Переменные, которые папка получает от родителей (без собственных), с названием папки-источника. */
+    suspend fun inheritedVars(note: NoteEntity): List<Pair<VarDef, String>> {
+        val dao = dao() ?: return emptyList()
+        val chain = mutableListOf<NoteEntity>()
+        var cur = note.parentId
+        while (cur != null && chain.size < 64) {
+            val n = dao.get(cur) ?: break
+            chain.add(n)
+            cur = n.parentId
+        }
+        val result = mutableListOf<Pair<VarDef, String>>()
+        for (f in chain.asReversed()) {
+            for (d in parseVars(f.varsJson)) {
+                val i = result.indexOfFirst { it.first.name == d.name }
+                if (d.off) {
+                    if (i >= 0) result.removeAt(i)
+                } else if (i >= 0) {
+                    result[i] = d to f.title.ifBlank { "…" }
+                } else {
+                    result.add(d to f.title.ifBlank { "…" })
+                }
+            }
+        }
+        return result
+    }
 
     fun openProps(note: NoteEntity) {
         val dao = dao() ?: return

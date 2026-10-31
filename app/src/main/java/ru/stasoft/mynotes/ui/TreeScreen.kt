@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
 import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
-import ru.stasoft.mynotes.data.formatNumber
+import ru.stasoft.mynotes.data.formatValues
 
 private val BarColor = Color(0xFF1B2330)
 
@@ -239,7 +239,7 @@ fun TreeScreen(vm: AppViewModel) {
                         )
                         numbers[cur.id]?.let {
                             Text(
-                                formatNumber(it),
+                                formatValues(it),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -340,7 +340,7 @@ fun TreeScreen(vm: AppViewModel) {
 @Composable
 private fun NoteRow(
     note: NoteEntity,
-    number: Double?,
+    number: List<Pair<String, Double>>?,
     selected: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
@@ -380,7 +380,7 @@ private fun NoteRow(
                 Text(status.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else if (number != null) {
                 Text(
-                    formatNumber(number),
+                    formatValues(number),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

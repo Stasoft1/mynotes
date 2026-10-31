@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [NoteEntity::class, SnippetEntity::class], version = 5, exportSchema = true)
+@Database(entities = [NoteEntity::class, SnippetEntity::class], version = 6, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
@@ -51,12 +51,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN varsJson TEXT NOT NULL DEFAULT ''")
+                // Прежний флажок «Числовые значения» становится переменной с суммой.
+                db.execSQL(
+                    "UPDATE notes SET varsJson = '[{\"n\":\"' || replace(replace(numericField, '\"', ''), '\\', '') || " +
+                        "'\",\"a\":\"sum\"}]' WHERE numeric = 1",
+                )
+            }
+        }
+
         /** Открывает зашифрованную базу. [key] — мастер-ключ из Vault; вызывающий затирает его сам. */
         fun open(context: Context, key: ByteArray): AppDatabase {
             val factory = SupportOpenHelperFactory(key.copyOf())
             return Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
         }
     }

@@ -6,8 +6,7 @@ data class NumRow(
     val id: Long,
     val parentId: Long?,
     val isFolder: Boolean,
-    val numeric: Boolean,
-    val numericField: String,
+    val varsJson: String,
     val head: String,
 )
 
@@ -33,52 +32,70 @@ fun parseNoteNumber(head: String, field: String): Double? {
     return null
 }
 
-/**
- * Суммы по всему дереву. Флажок «Числовые значения» у папки действует на всё её содержимое, пока ниже
- * не встретится другая папка со своим флажком. Число заметки берётся по настройке ближайшей такой папки,
- * число папки — сумма чисел её содержимого. Папки без единого числа в результат не попадают.
- */
-fun computeNumbers(rows: List<NumRow>): Map<Long, Double> {
-    if (rows.none { it.numeric }) return emptyMap()
-    val byId = HashMap<Long, NumRow>(rows.size * 2)
-    val kids = HashMap<Long?, MutableList<NumRow>>()
-    for (r in rows) {
-        byId[r.id] = r
-        kids.getOrPut(r.parentId) { mutableListOf() }.add(r)
+private class Acc {
+    var sum = 0.0
+    var max = Double.NEGATIVE_INFINITY
+    var min = Double.POSITIVE_INFINITY
+    fun add(v: Double) {
+        sum += v
+        if (v > max) max = v
+        if (v < min) min = v
     }
-    val result = HashMap<Long, Double>()
+    fun result(agg: String): Double = when (agg) {
+        "max" -> max
+        "min" -> min
+        else -> sum
+    }
+}
 
-    // Обходим от корня вниз без рекурсии по глубине записей: стек вместо вызовов.
-    // Сначала порядок посещения с настройкой, затем суммирование в обратном порядке.
-    class Visit(val row: NumRow, val field: String?)
+private class Visit(val row: NumRow, val eff: List<VarDef>, val childEff: List<VarDef>)
+
+/**
+ * Значения переменных по всему дереву. Переменные, объявленные в папке, действуют на её содержимое и вложенные
+ * папки (см. applyVars). Число заметки берётся по каждой действующей переменной, число папки — свод значений
+ * её содержимого по правилу переменной. Записи без единого значения в результат не попадают.
+ */
+fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
+    if (rows.none { it.isFolder && it.varsJson.isNotEmpty() }) return emptyMap()
+    val kids = HashMap<Long?, MutableList<NumRow>>()
+    for (r in rows) kids.getOrPut(r.parentId) { mutableListOf() }.add(r)
+
     val order = ArrayList<Visit>(rows.size)
     val stack = ArrayDeque<Visit>()
-    kids[null]?.forEach { stack.addLast(Visit(it, null)) }
+    fun visit(r: NumRow, eff: List<VarDef>) {
+        val childEff = if (r.isFolder && r.varsJson.isNotEmpty()) applyVars(eff, parseVars(r.varsJson)) else eff
+        stack.addLast(Visit(r, eff, childEff))
+    }
+    kids[null]?.forEach { visit(it, emptyList()) }
     while (stack.isNotEmpty()) {
         val v = stack.removeLast()
         order.add(v)
-        if (v.row.isFolder) {
-            val childField = if (v.row.numeric) v.row.numericField else v.field
-            kids[v.row.id]?.forEach { stack.addLast(Visit(it, childField)) }
-        }
+        if (v.row.isFolder) kids[v.row.id]?.forEach { visit(it, v.childEff) }
     }
-    val sums = HashMap<Long, Double>()
+
+    val result = HashMap<Long, List<Pair<String, Double>>>()
+    val accs = HashMap<Long, LinkedHashMap<String, Acc>>()
     for (v in order.asReversed()) {
         val r = v.row
-        if (r.isFolder) {
-            val s = sums[r.id]
-            if (s != null) result[r.id] = s
+        val values: List<Pair<String, Double>> = if (r.isFolder) {
+            val acc = accs[r.id]
+            if (acc == null) emptyList()
+            else v.childEff.filter { it.agg != "none" }.mapNotNull { d -> acc[d.name]?.let { d.name to it.result(d.agg) } }
         } else {
-            val f = v.field ?: continue
-            val n = parseNoteNumber(r.head, f) ?: continue
-            result[r.id] = n
+            v.eff.filter { it.agg != "none" }.mapNotNull { d -> parseNoteNumber(r.head, d.name)?.let { d.name to it } }
         }
-        val value = result[r.id] ?: continue
-        val p = r.parentId
-        if (p != null) sums[p] = (sums[p] ?: 0.0) + value
+        if (values.isEmpty()) continue
+        result[r.id] = values
+        val p = r.parentId ?: continue
+        val pa = accs.getOrPut(p) { LinkedHashMap() }
+        for ((name, value) in values) pa.getOrPut(name) { Acc() }.add(value)
     }
     return result
 }
+
+/** Подпись под названием: одно число первой строки — просто число, иначе «Имя число · Имя число». */
+fun formatValues(values: List<Pair<String, Double>>): String =
+    values.joinToString(" · ") { (name, v) -> if (name.isEmpty()) formatNumber(v) else "$name ${formatNumber(v)}" }
 
 /** «66261», «1 234,5»: целые без дробной части, тысячи через пробел. */
 fun formatNumber(v: Double): String {

@@ -24,6 +24,14 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import ru.stasoft.mynotes.data.varLabel
+import ru.stasoft.mynotes.data.varsToJson
+import ru.stasoft.mynotes.data.parseVars
+import ru.stasoft.mynotes.data.AGG_LABELS
+import ru.stasoft.mynotes.data.VarDef
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,8 +105,10 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     var showColors by remember { mutableStateOf(false) }
     var showReminder by remember { mutableStateOf(false) }
     var raw by remember { mutableStateOf(false) }
-    var numeric by remember(note.id) { mutableStateOf(note.numeric) }
-    var numField by remember(note.id) { mutableStateOf(note.numericField) }
+    var own by remember(note.id) { mutableStateOf(parseVars(note.varsJson)) }
+    var inherited by remember(note.id) { mutableStateOf<List<Pair<VarDef, String>>>(emptyList()) }
+    var showAddVar by remember { mutableStateOf(false) }
+    LaunchedEffect(note.id) { inherited = vm.inheritedVars(note) }
     val legacy = effectiveIcon(note)
     val shownKey: String? = if (iconKey == null) legacy else iconKey?.ifEmpty { null }
 
@@ -109,10 +119,9 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
         val cl = checklist
         val ro = readOnly
         val tg = tags
-        val nm = numeric
-        val nf = numField.trim()
+        val vj = varsToJson(own)
         vm.closeProps { n ->
-            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim(), numeric = nm, numericField = nf)
+            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim(), varsJson = vj)
         }
     }
     BackHandler { close() }
@@ -176,32 +185,12 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             }
             HorizontalDivider()
             if (note.isFolder) {
-                PropRow(
-                    "Числовые значения",
-                    "Суммировать числа заметок этой папки и вложенных в её строке",
-                    onClick = { numeric = !numeric },
-                ) { Checkbox(checked = numeric, onCheckedChange = { numeric = it }) }
-                if (numeric) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                        TextField(
-                            value = numField,
-                            onValueChange = { numField = it },
-                            label = { Text("Поле с числом, например Сумма") },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            "Пусто — число берётся из первой строки заметки, как в MyTreeNotes. " +
-                                "Заполнено — из строки «Поле: число».",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                VarsSection(
+                    inherited = inherited,
+                    own = own,
+                    onChange = { own = it },
+                    onAdd = { showAddVar = true },
+                )
                 HorizontalDivider()
             }
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -242,6 +231,20 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             }
             Box(Modifier.height(24.dp))
         }
+    }
+
+    if (showAddVar) {
+        AddVarDialog(
+            onDismiss = { showAddVar = false },
+            onAdd = { def ->
+                showAddVar = false
+                // Если такая переменная была отключена в этой папке — просто возвращаем её.
+                own = own.filterNot { it.name == def.name } +
+                    if (inherited.any { it.first.name == def.name && it.first.agg == def.agg } &&
+                        own.any { it.name == def.name && it.off }
+                    ) emptyList() else listOf(def)
+            },
+        )
     }
 
     if (showIcons) {
@@ -362,4 +365,109 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             },
         )
     }
+}
+
+@Composable
+private fun AggPicker(agg: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) { Text(AGG_LABELS[agg] ?: agg) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            AGG_LABELS.forEach { (k, label) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; onPick(k) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun VarsSection(
+    inherited: List<Pair<VarDef, String>>,
+    own: List<VarDef>,
+    onChange: (List<VarDef>) -> Unit,
+    onAdd: () -> Unit,
+) {
+    SectionTitle("ПЕРЕМЕННЫЕ")
+    Text(
+        "Поле «Имя: число» в тексте заметок. Действует в этой папке и во всех вложенных; значения сводятся вверх " +
+            "по дереву и показываются под названием.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    val inheritedNames = inherited.map { it.first.name }.toSet()
+    inherited.forEach { (def, from) ->
+        val override = own.firstOrNull { it.name == def.name }
+        val disabled = override?.off == true
+        val agg = if (override != null && !override.off) override.agg else def.agg
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    varLabel(def.name),
+                    style = MaterialTheme.typography.titleMedium,
+                    textDecoration = if (disabled) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
+                Text("из папки «$from»", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (disabled) {
+                TextButton(onClick = { onChange(own.filterNot { it.name == def.name }) }) { Text("Вернуть") }
+            } else {
+                AggPicker(agg) { picked ->
+                    val rest = own.filterNot { it.name == def.name }
+                    onChange(if (picked == def.agg) rest else rest + VarDef(def.name, picked))
+                }
+                IconButton(onClick = { onChange(own.filterNot { it.name == def.name } + VarDef(def.name, def.agg, off = true)) }) {
+                    Icon(Icons.Filled.Delete, "Отключить здесь")
+                }
+            }
+        }
+    }
+    own.filter { !it.off && it.name !in inheritedNames }.forEach { def ->
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(varLabel(def.name), style = MaterialTheme.typography.titleMedium)
+                Text("задана здесь", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            AggPicker(def.agg) { picked -> onChange(own.map { if (it.name == def.name) it.copy(agg = picked) else it }) }
+            IconButton(onClick = { onChange(own.filterNot { it.name == def.name }) }) { Icon(Icons.Filled.Delete, "Удалить") }
+        }
+    }
+    TextButton(onClick = onAdd, modifier = Modifier.padding(horizontal = 8.dp)) { Text("+ Добавить переменную") }
+}
+
+@Composable
+private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var agg by remember { mutableStateOf("sum") }
+    var firstLine by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новая переменная") },
+        text = {
+            Column {
+                Row(Modifier.fillMaxWidth().clickable { firstLine = !firstLine }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = firstLine, onCheckedChange = { firstLine = it })
+                    Text("Число в первой строке заметки")
+                }
+                if (!firstLine) {
+                    TextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Название поля, например Сумма") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Text("Как сводить вверх по дереву", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
+                AggPicker(agg) { agg = it }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = firstLine || name.isNotBlank(),
+                onClick = { onAdd(VarDef(if (firstLine) "" else name.trim().trimEnd(':'), agg)) },
+            ) { Text("Добавить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
