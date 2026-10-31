@@ -49,6 +49,13 @@ object Mdi {
 
     fun has(ctx: Context, name: String): Boolean = load(ctx).containsKey(name)
 
+    /** В MyTreeNotes имена пишутся с подчёркиванием (gas_station), в наборе — с дефисом (gas-station). */
+    fun resolve(ctx: Context, name: String): String? {
+        if (has(ctx, name)) return name
+        val dashed = name.trim().lowercase().replace('_', '-')
+        return if (has(ctx, dashed)) dashed else null
+    }
+
     fun names(ctx: Context): List<String> = load(ctx).keys.sorted()
 
     fun path(ctx: Context, name: String): Path? {
@@ -119,7 +126,7 @@ fun legacyIconName(ctx: Context, note: NoteEntity): String? {
     if (raw.isEmpty()) return null
     try {
         val first = JSONObject(raw).optJSONArray("icon")?.optString(0, "").orEmpty()
-        if (first.isNotEmpty() && Mdi.has(ctx, first)) return first
+        if (first.isNotEmpty()) Mdi.resolve(ctx, first)?.let { return it }
     } catch (_: Exception) {
     }
     val pairs = mutableListOf<Pair<String, String>>()
@@ -129,7 +136,7 @@ fun legacyIconName(ctx: Context, note: NoteEntity): String? {
         return null
     }
     val named = pairs.filter { (k, _) -> k.contains("icon", ignoreCase = true) }.map { it.second }
-    return (named + pairs.map { it.second }).firstOrNull { it.length > 2 && Mdi.has(ctx, it) }
+    return (named + pairs.map { it.second }).firstNotNullOfOrNull { if (it.length > 2) Mdi.resolve(ctx, it) else null }
 }
 
 /** Что показывать у записи: свой выбор (пустая строка — «без иконки»), иначе иконка из импорта. */
