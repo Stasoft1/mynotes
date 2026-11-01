@@ -453,6 +453,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         refreshPath()
     }
 
+    /** Записи для отчёта: содержимое папки [id] (null — корень) и сама папка. */
+    suspend fun reportData(id: Long?): Pair<NoteEntity?, List<NoteEntity>> {
+        val dao = dao() ?: return null to emptyList()
+        return (id?.let { dao.get(it) }) to dao.children(id).first()
+    }
+
     /** Переход в папку по id (из карточки «Сегодня»). */
     fun openFolderById(id: Long) {
         val dao = dao() ?: return

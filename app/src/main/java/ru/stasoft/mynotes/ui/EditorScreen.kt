@@ -200,7 +200,18 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         // Enter в конце строки перед другим переводом строки по тексту неоднозначен (куда вставлен '\n'),
         // поэтому место берём по курсору: он стоит сразу после вставленного перевода строки.
         val q = v.selection.start
-        if (v.selection.collapsed && b.length == a.length + 1 && q >= 1 && b[q - 1] == '\n' && b.removeRange(q - 1, q) == a) {
+        // Клавиатура могла заодно исправить слово (автозамена): тогда текст без '\n' чуть отличается от прежнего.
+        val enterBase = if (v.selection.collapsed && q >= 1 && b[q - 1] == '\n') b.removeRange(q - 1, q) else null
+        val plainEnter = enterBase != null && b.length == a.length + 1 && enterBase == a
+        val fuzzyEnter = enterBase != null && !plainEnter && Math.abs(enterBase.length - a.length) <= 6 && !titleFocused &&
+            continueList(enterBase, q - 1) != null
+        if (fuzzyEnter) {
+            continueList(enterBase!!, q - 1)?.let {
+                updateBody(it)
+                return
+            }
+        }
+        if (plainEnter) {
             p = q - 1
             removed = 0
             inserted = 1

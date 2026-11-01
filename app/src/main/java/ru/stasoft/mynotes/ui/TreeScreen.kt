@@ -118,6 +118,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showSnippets by remember { mutableStateOf(false) }
     var showSort by remember { mutableStateOf(false) }
     var showCheck by remember { mutableStateOf(false) }
+    var showReport by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -158,6 +159,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 showSort = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Отчёт по папке…") },
+                            onClick = {
+                                menuOpen = false
+                                showReport = true
                             },
                         )
                         DropdownMenuItem(
@@ -325,6 +333,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSnippets) SnippetsDialog(vm, onDismiss = { showSnippets = false })
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
+    if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
     if (showBioSetup) {
         BioSetupDialog(
             onDismiss = { showBioSetup = false },
