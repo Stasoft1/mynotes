@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.CheckBox
 import ru.stasoft.mynotes.data.mapSpansForEdit
+import ru.stasoft.mynotes.data.applyFormulas
 import ru.stasoft.mynotes.data.applyStyle
 import ru.stasoft.mynotes.data.coveredValue
 import ru.stasoft.mynotes.data.styleAt
@@ -218,6 +219,22 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         spans = mapSpansForEdit(spans, p, removed, inserted, typing)
         pending = emptyMap()
         bodyField = v
+    }
+
+    // Формульные переменные папки: результат сам вписывается в текст после паузы в наборе.
+    var formulaBase by remember(note.id) { mutableStateOf(note.body) }
+    LaunchedEffect(note.id, body) {
+        if (note.checklist) return@LaunchedEffect
+        delay(900)
+        val vars = vm.inheritedVars(note).map { it.first }.filter { it.formula.isNotBlank() }
+        if (vars.isEmpty()) return@LaunchedEffect
+        val next = applyFormulas(formulaBase, bodyField.text, vars)
+        formulaBase = next
+        if (next != bodyField.text) {
+            val sel = bodyField.selection
+            val max = next.length
+            updateBody(TextFieldValue(next, androidx.compose.ui.text.TextRange(minOf(sel.start, max), minOf(sel.end, max))))
+        }
     }
     fun setCurrent(v: TextFieldValue) {
         if (titleFocused) titleField = singleLine(v) else updateBody(v)

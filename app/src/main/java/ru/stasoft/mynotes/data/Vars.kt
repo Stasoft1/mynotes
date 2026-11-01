@@ -15,6 +15,8 @@ data class VarDef(
     val off: Boolean = false,
     /** Поле в тексте заметки, если оно называется иначе, чем переменная (пусто — как название). */
     val field: String = "",
+    /** Формула по другим переменным заметки, например «Литры * ЦенаБ». Пусто — обычное поле. */
+    val formula: String = "",
 )
 
 fun VarDef.fieldName(): String = field.ifEmpty { name }
@@ -40,6 +42,7 @@ fun parseVars(json: String): List<VarDef> {
                 o.optString("a", "sum").ifEmpty { "sum" },
                 o.optBoolean("off", false),
                 o.optString("f", ""),
+                o.optString("x", ""),
             )
         }
     } catch (_: Exception) {
@@ -54,6 +57,7 @@ fun varsToJson(list: List<VarDef>): String {
         arr.put(JSONObject().put("n", it.name).put("a", it.agg).apply {
             if (it.off) put("off", true)
             if (it.field.isNotEmpty()) put("f", it.field)
+            if (it.formula.isNotEmpty()) put("x", it.formula)
         })
     }
     return arr.toString()

@@ -135,7 +135,7 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
         } else {
             for (d in v.eff) {
                 if (d.agg == "none") continue
-                val n = parseNoteNumber(r.head, d.fieldName()) ?: continue
+                val n = parseNoteNumber(r.head, d.fieldName()) ?: formulaValue(d, r.head, v.eff) ?: continue
                 if (d.agg == "span") {
                     below(readings[d.fieldName()], n)?.let { values.add(d.name to n - it) }
                     if (parent != null) raws.getOrPut(parent) { LinkedHashMap() }.getOrPut(d.name) { Acc() }.add(n)
