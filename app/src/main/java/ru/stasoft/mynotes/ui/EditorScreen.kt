@@ -123,6 +123,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var spans by remember(note.id) { mutableStateOf(parseSpans(note.spansJson, note.body.length)) }
     // Переключатели оформления при курсоре без выделения: действуют на следующий набранный текст.
     var pending by remember(note.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    // Позиция только что вставленного Enter: продолжение списка делается чуть позже, когда клавиатура закончила правку.
+    var enterAt by remember(note.id) { mutableStateOf(-1 to 0) }
+    val skipEnter = remember(note.id) { java.util.concurrent.atomic.AtomicBoolean(false) }
     var showTextColor by remember { mutableStateOf(false) }
     var showBgColor by remember { mutableStateOf(false) }
     var showSizes by remember { mutableStateOf(false) }
@@ -200,27 +203,14 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         // Enter в конце строки перед другим переводом строки по тексту неоднозначен (куда вставлен '\n'),
         // поэтому место берём по курсору: он стоит сразу после вставленного перевода строки.
         val q = v.selection.start
-        // Клавиатура могла заодно исправить слово (автозамена): тогда текст без '\n' чуть отличается от прежнего.
+        // Enter: перевод строки принимаем как обычный текст, а продолжение списка делаем отложенно (см. enterAt).
         val enterBase = if (v.selection.collapsed && q >= 1 && b[q - 1] == '\n') b.removeRange(q - 1, q) else null
-        val plainEnter = enterBase != null && b.length == a.length + 1 && enterBase == a
-        val fuzzyEnter = enterBase != null && !plainEnter && Math.abs(enterBase.length - a.length) <= 6 && !titleFocused &&
-            continueList(enterBase, q - 1) != null
-        if (fuzzyEnter) {
-            continueList(enterBase!!, q - 1)?.let {
-                updateBody(it)
-                return
-            }
-        }
-        if (plainEnter) {
-            p = q - 1
-            removed = 0
-            inserted = 1
-            if (!titleFocused) {
-                val cont = continueList(a, p)
-                if (cont != null) {
-                    updateBody(cont)
-                    return
-                }
+        if (enterBase != null && !skipEnter.get() && !titleFocused && !note.readOnly && Math.abs(enterBase.length - a.length) <= 6) {
+            enterAt = (q - 1) to (enterAt.second + 1)
+            if (b.length == a.length + 1 && enterBase == a) {
+                p = q - 1
+                removed = 0
+                inserted = 1
             }
         }
         val base = styleAt(spans, if (removed > 0) p + 1 else p)
@@ -230,6 +220,20 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         spans = mapSpansForEdit(spans, p, removed, inserted, typing)
         pending = emptyMap()
         bodyField = v
+    }
+
+    LaunchedEffect(enterAt) {
+        val (p, _) = enterAt
+        if (p < 0) return@LaunchedEffect
+        delay(40)
+        val f = bodyField
+        val t = f.text
+        if (p < t.length && t[p] == '\n' && f.selection.collapsed && f.selection.start == p + 1) {
+            continueList(t.removeRange(p, p + 1), p)?.let {
+                skipEnter.set(true)
+                try { updateBody(it) } finally { skipEnter.set(false) }
+            }
+        }
     }
 
     // Формульные переменные папки: результат сам вписывается в текст после паузы в наборе.
@@ -373,18 +377,6 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .fillMaxWidth()
                     .weight(1f)
                     .onFocusChanged { if (it.isFocused) titleFocused = false }
-                    .onPreviewKeyEvent { ev ->
-                        // Enter в строке списка продолжает список (если клавиатура шлёт Enter как нажатие клавиши).
-                        if (ev.type == KeyEventType.KeyDown && (ev.key == Key.Enter || ev.key == Key.NumPadEnter) &&
-                            !note.readOnly && bodyField.selection.collapsed
-                        ) {
-                            val cont = continueList(bodyField.text, bodyField.selection.min)
-                            if (cont != null) {
-                                updateBody(cont)
-                                true
-                            } else false
-                        } else false
-                    },
             )
             if (!note.checklist) Column(
                 Modifier
