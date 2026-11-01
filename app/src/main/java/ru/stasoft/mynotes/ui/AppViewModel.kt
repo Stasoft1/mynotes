@@ -453,10 +453,27 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         refreshPath()
     }
 
-    /** Записи для отчёта: содержимое папки [id] (null — корень) и сама папка. */
-    suspend fun reportData(id: Long?): Pair<NoteEntity?, List<NoteEntity>> {
+    /** Строка отчёта: запись дерева на глубине [depth] (1 — прямое содержимое папки) и название её родителя. */
+    data class ReportRow(val id: Long, val title: String, val isFolder: Boolean, val depth: Int, val parentTitle: String)
+
+    /** Всё поддерево папки [id] (null — вся база) для отчёта, в порядке дерева; даты в названиях задают порядок. */
+    suspend fun reportData(id: Long?): Pair<String?, List<ReportRow>> {
         val dao = dao() ?: return null to emptyList()
-        return (id?.let { dao.get(it) }) to dao.children(id).first()
+        val rows = dao.titleRows()
+        return withContext(Dispatchers.Default) {
+            val kids = rows.groupBy { it.parentId }
+            val out = ArrayList<ReportRow>()
+            fun walk(parent: Long?, parentTitle: String, depth: Int) {
+                val list = kids[parent].orEmpty()
+                val sorted = if (list.isNotEmpty() && list.all { dateInTitle(it.title) != null }) list.sortedBy { dateInTitle(it.title) } else list
+                for (r in sorted) {
+                    out.add(ReportRow(r.id, r.title, r.isFolder, depth, parentTitle))
+                    if (r.isFolder && depth < 12) walk(r.id, r.title, depth + 1)
+                }
+            }
+            walk(id, "", 1)
+            rows.firstOrNull { it.id == id }?.title to out
+        }
     }
 
     /** Переход в папку по id (из карточки «Сегодня»). */
