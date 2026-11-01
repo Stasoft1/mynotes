@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatListBulleted
@@ -118,9 +120,12 @@ private fun singleLine(v: TextFieldValue): TextFieldValue =
 
 @Composable
 fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
-    var titleField by remember(note.id) { mutableStateOf(TextFieldValue(note.title)) }
-    var bodyField by remember(note.id) { mutableStateOf(TextFieldValue(note.body)) }
-    var spans by remember(note.id) { mutableStateOf(parseSpans(note.spansJson, note.body.length)) }
+    // Несохранённые правки живут в черновике модели: переживают открытие свойств и блокировку.
+    val draft0 = remember(note.id) { vm.draft?.takeIf { it.id == note.id } }
+    var titleField by remember(note.id) { mutableStateOf(TextFieldValue(draft0?.title ?: note.title)) }
+    var bodyField by remember(note.id) { mutableStateOf(TextFieldValue(draft0?.body ?: note.body)) }
+    var spans by remember(note.id) { mutableStateOf(parseSpans(draft0?.spans ?: note.spansJson, (draft0?.body ?: note.body).length)) }
+    var askExit by remember { mutableStateOf(false) }
     // Переключатели оформления при курсоре без выделения: действуют на следующий набранный текст.
     var pending by remember(note.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     // Позиция только что вставленного Enter: продолжение списка делается чуть позже, когда клавиатура закончила правку.
@@ -161,11 +166,12 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         }
     }
 
-    // Автосохранение и снимки для «Отменить» после паузы в наборе.
-    LaunchedEffect(note.id, title, body, spansJson) {
-        delay(600)
-        vm.save(note.id, title, body, spansJson)
+    // Есть ли несохранённые правки: сравниваем с тем, что лежит в базе.
+    val dirty = title != note.title || body != note.body || (!note.checklist && spansJson != note.spansJson)
+    LaunchedEffect(note.id, title, body, spansJson, dirty) {
+        vm.draft = if (dirty) AppViewModel.Draft(note.id, title, body, spansJson) else null
     }
+    // Снимки для «Отменить» после паузы в наборе.
     LaunchedEffect(title) {
         delay(600)
         titleHistory.commit(titleField)
@@ -175,11 +181,39 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         bodyHistory.commit(bodyField)
     }
 
-    fun close() {
+    val ctxToast = androidx.compose.ui.platform.LocalContext.current
+    fun saveNow() {
         vm.save(note.id, title, body, spansJson)
-        vm.closeEditor(title, body)
+        android.widget.Toast.makeText(ctxToast, "Сохранено", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    fun discard() {
+        vm.draft = null
+        vm.closeEditor(note.title, note.body)
+    }
+    fun close() {
+        if (dirty && !note.readOnly) askExit = true else discard()
     }
     BackHandler { close() }
+    if (askExit) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { askExit = false },
+            title = { Text("Сохранить изменения?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    askExit = false
+                    vm.save(note.id, title, body, spansJson)
+                    vm.draft = null
+                    vm.closeEditor(title, body)
+                }) { Text("Сохранить") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { askExit = false }) { Text("Отмена") }
+                    TextButton(onClick = { askExit = false; discard() }) { Text("Не сохранять") }
+                }
+            },
+        )
+    }
 
     // Действия над тем полем, в котором сейчас курсор.
     fun current(): TextFieldValue = if (titleFocused) titleField else bodyField
@@ -301,8 +335,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         topBar = {
             TopStrip {
                 StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { close() }
+                StripButton(Icons.Filled.Save, if (dirty) "Сохранить" else "Сохранено") { if (!note.readOnly) saveNow() }
                 Box {
-                    StripButton(Icons.Filled.Bookmarks, "Шаблоны") { showTemplates = true }
+                    StripButton(Icons.Filled.Menu, "Шаблоны") { showTemplates = true }
                     DropdownMenu(expanded = showTemplates, onDismissRequest = { showTemplates = false }) {
                         if (snippets.isEmpty()) {
                             DropdownMenuItem(text = { Text("Шаблонов нет") }, onClick = { showTemplates = false }, enabled = false)
@@ -331,12 +366,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     }
                 }
                 StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
-                StripButton(Icons.Filled.CheckBox, if (note.checklist) "Обычный текст" else "Список задач") {
-                    vm.save(note.id, title, body, if (note.checklist) null else "")
-                    vm.setChecklist(note.id, !note.checklist)
-                }
                 StripButton(Icons.Filled.Tune, "Свойства") {
-                    vm.save(note.id, title, body, spansJson)
                     vm.openProps(note)
                 }
             }

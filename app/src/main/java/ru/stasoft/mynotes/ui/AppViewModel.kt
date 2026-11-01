@@ -57,6 +57,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Открытая в редакторе запись (null — редактор закрыт). */
     var editing by mutableStateOf<NoteEntity?>(null)
+
+    /** Несохранённые правки открытой записи (до нажатия «Сохранить»). */
+    data class Draft(val id: Long, val title: String, val body: String, val spans: String)
+    var draft: Draft? = null
         private set
 
     /** Цепочка папок от корня до текущей. */
@@ -492,6 +496,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun goUp(): Boolean {
         if (editing != null) {
+            // Запасной путь: обычно «Назад» в редакторе обрабатывает сам редактор с вопросом о сохранении.
+            draft?.let { d -> if (d.id == editing?.id) save(d.id, d.title, d.body, d.spans) }
+            draft = null
             closeEditor()
             return true
         }
@@ -747,6 +754,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             val sp = spans ?: cur.spansJson
             if (cur.title == title && cur.body == body && cur.spansJson == sp) return@launch
             dao.update(cur.copy(title = title, body = body, spansJson = sp, updatedAt = System.currentTimeMillis()))
+            if (editing?.id == id) editing = dao.get(id)
         }
     }
 

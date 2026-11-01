@@ -1,5 +1,7 @@
 package ru.stasoft.mynotes.ui
 
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.foundation.layout.size
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -175,7 +177,14 @@ fun LockScreen(vm: AppViewModel) {
                 enabled = !vm.busy,
             ) { Text(if (vm.needSetup) "Создать" else "Открыть") }
             if (canBio) {
-                TextButton(onClick = promptBio, modifier = Modifier.padding(start = 8.dp)) { Text("Отпечаток") }
+                androidx.compose.material3.IconButton(onClick = promptBio, modifier = Modifier.padding(start = 8.dp)) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.Fingerprint,
+                        contentDescription = "Отпечаток",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
             }
             if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(start = 16.dp))
         }
