@@ -32,6 +32,9 @@ interface NoteDao {
     @Query("SELECT id, parentId, isFolder, title, substr(body, 1, 2000) AS head FROM notes")
     suspend fun titleRows(): List<TitleRow>
 
+    @Query("SELECT id, parentId, title FROM notes WHERE isFolder = 1")
+    fun folderTitles(): Flow<List<FolderTitle>>
+
     /** Меняется при любой правке, добавлении и удалении записей: по нему пересчитываются суммы. */
     @Query("SELECT COALESCE(MAX(updatedAt), 0) || ':' || COUNT(*) || ':' || COALESCE(SUM(LENGTH(varsJson)), 0) FROM notes")
     fun changeStamp(): Flow<String>

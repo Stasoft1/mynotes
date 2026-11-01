@@ -34,7 +34,9 @@ import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
+import ru.stasoft.mynotes.data.FolderTitle
 import ru.stasoft.mynotes.data.ReadingIssue
+import ru.stasoft.mynotes.data.dateInTitle
 import ru.stasoft.mynotes.data.VarDef
 import ru.stasoft.mynotes.data.computeNumbers
 import ru.stasoft.mynotes.data.parseVars
@@ -108,6 +110,28 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /** Папка сегодняшнего дня (по дате в названии) и значения её переменных, плюс объемлющая папка (месяц). */
+    data class TodayInfo(
+        val folder: FolderTitle,
+        val values: List<Pair<String, Double>>,
+        val parentTitle: String?,
+        val parentValues: List<Pair<String, Double>>,
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val today: StateFlow<TodayInfo?> =
+        dbFlow
+            .flatMapLatest { db ->
+                if (db == null) flowOf(null)
+                else combine(db.notes().folderTitles(), numbers) { folders, nums ->
+                    val d = java.time.LocalDate.now()
+                    val hit = folders.firstOrNull { dateInTitle(it.title) == d } ?: return@combine null
+                    val parent = folders.firstOrNull { it.id == hit.parentId }
+                    TodayInfo(hit, nums[hit.id].orEmpty(), parent?.title, parent?.let { nums[it.id] }.orEmpty())
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     private var backgroundedAt = 0L
 
     // ---------- быстрые вставки ----------
@@ -145,6 +169,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
         }
         prefs.edit().putBoolean("snippets_seeded", true).apply()
+        // Шаблон заявки с переменными папки: добавляется один раз, существующие шаблоны не трогаем.
+        if (!prefs.getBoolean("request_template_seeded", false)) {
+            val sort = dao.maxSnippetSort() + 1
+            dao.insertSnippet(SnippetEntity(folderId = null, label = REQUEST_TEMPLATE_LABEL, text = REQUEST_TEMPLATE, sortIndex = sort))
+            prefs.edit().putBoolean("request_template_seeded", true).apply()
+        }
     }
 
     fun saveSnippet(id: Long?, folderId: Long?, label: String, text: String) {
@@ -421,6 +451,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         query.value = ""
         folderId.value = note.id
         refreshPath()
+    }
+
+    /** Переход в папку по id (из карточки «Сегодня»). */
+    fun openFolderById(id: Long) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.get(id)?.let { openFolder(it) } }
     }
 
     fun goToPathIndex(index: Int) {
@@ -837,5 +873,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val AUTO_LOCK_MS = 30_000L
+        const val REQUEST_TEMPLATE_LABEL = "Заявка (поля)"
+        const val REQUEST_TEMPLATE =
+            "Договор: \nТелефон: +7\nРабота: \nСкорость мб: \nПримечание: \nwf name: \nwf pass: \n" +
+                "Кабель вп: \nКабель кокс: \nСвитч: \nПорт: \n{переменные}"
     }
 }

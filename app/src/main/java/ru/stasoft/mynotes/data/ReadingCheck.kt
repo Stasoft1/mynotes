@@ -11,6 +11,8 @@ data class TitleRow(
     val head: String,
 )
 
+data class FolderTitle(val id: Long, val parentId: Long?, val title: String)
+
 data class ReadingIssue(
     val noteId: Long,
     val date: LocalDate,
@@ -22,7 +24,8 @@ data class ReadingIssue(
 
 private val DATE = Regex("(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}|\\d{2})")
 
-private fun dateIn(title: String): LocalDate? {
+/** Дата в названии папки дня, например «16.10.26 - 8107». */
+fun dateInTitle(title: String): LocalDate? {
     val m = DATE.find(title) ?: return null
     return try {
         val y = m.groupValues[3].toInt().let { if (it < 100) 2000 + it else it }
@@ -61,7 +64,7 @@ fun checkReadings(rows: List<TitleRow>, scopeId: Long?, field: String): List<Rea
         var date: LocalDate? = null
         var folderTitle = ""
         while (cur != null && date == null) {
-            date = dateIn(cur.title)
+            date = dateInTitle(cur.title)
             if (date != null) folderTitle = cur.title
             cur = cur.parentId?.let { byId[it] }
         }

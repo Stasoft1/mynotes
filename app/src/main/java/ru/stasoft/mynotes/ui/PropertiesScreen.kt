@@ -464,6 +464,18 @@ private fun VarsSection(
         }
     }
     TextButton(onClick = onAdd, modifier = Modifier.padding(horizontal = 8.dp)) { Text("+ Добавить переменную") }
+    TextButton(
+        onClick = {
+            val have = own.map { it.name }.toSet() + inherited.map { it.first.name }
+            val preset = listOf(
+                VarDef("Сумма", "sum"),
+                VarDef("Пробег", "max"),
+                VarDef("За период", "span", field = "Пробег"),
+            ).filter { it.name !in have }
+            onChange(own + preset)
+        },
+        modifier = Modifier.padding(horizontal = 8.dp),
+    ) { Text("+ Набор для заявок: Сумма, Пробег, За период") }
 }
 
 @Composable

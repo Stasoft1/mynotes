@@ -76,6 +76,7 @@ import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
 import ru.stasoft.mynotes.data.formatValues
+import ru.stasoft.mynotes.data.formatValuesMoney
 import ru.stasoft.mynotes.data.resolveTitle
 
 private val BarColor = Color(0xFF1B2330)
@@ -105,6 +106,7 @@ fun StripButton(icon: ImageVector, description: String, onClick: () -> Unit) {
 fun TreeScreen(vm: AppViewModel) {
     val items by vm.items.collectAsState()
     val numbers by vm.numbers.collectAsState()
+    val today by vm.today.collectAsState()
     val query by vm.query.collectAsState()
     val folderId by vm.folderId.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -219,6 +221,9 @@ fun TreeScreen(vm: AppViewModel) {
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
+            }
+            today?.let { t ->
+                if (folderId == null && query.isBlank()) TodayCard(t, onOpen = { vm.openFolderById(t.folder.id) })
             }
             vm.clip?.let { c ->
                 Row(
@@ -681,4 +686,37 @@ private fun ReadingCheckDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
+}
+
+@Composable
+private fun TodayCard(t: AppViewModel.TodayInfo, onOpen: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Text(
+            "Сегодня · " + resolveTitle(t.folder.title, t.values),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            if (t.values.isEmpty()) "Пока пусто" else formatValuesMoney(t.values),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        if (t.parentTitle != null && t.parentValues.isNotEmpty()) {
+            Text(
+                "${t.parentTitle}: " + formatValuesMoney(t.parentValues),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }

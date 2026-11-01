@@ -183,3 +183,13 @@ fun formatNumber(v: Double): String {
     val out = grouped + if (parts.size > 1) "," + parts[1] else ""
     return if (neg) "-$out" else out
 }
+
+/** То же, что formatValues, но «Сумма» подписана рублями. */
+fun formatValuesMoney(values: List<Pair<String, Double>>): String =
+    values.joinToString(" · ") { (name, v) ->
+        when {
+            name.equals("Сумма", ignoreCase = true) -> formatNumber(v) + " ₽"
+            name.isEmpty() -> formatNumber(v)
+            else -> "$name ${formatNumber(v)}"
+        }
+    }
