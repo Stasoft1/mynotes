@@ -451,7 +451,11 @@ private fun NoteRow(
                 }
             }
         }
-        NoteIcon(effectiveIcon(note), legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary, 28.dp)
+        NoteIcon(
+            effectiveIcon(note),
+            note.iconColorArgb?.let { Color(it) } ?: legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary,
+            28.dp,
+        )
     }
 }
 

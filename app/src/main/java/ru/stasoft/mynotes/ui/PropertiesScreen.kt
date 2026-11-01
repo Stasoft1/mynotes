@@ -102,6 +102,8 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     var readOnly by remember(note.id) { mutableStateOf(note.readOnly) }
     var tags by remember(note.id) { mutableStateOf(note.keyword) }
     var showIcons by remember { mutableStateOf(false) }
+    var iconColor by remember(note.id) { mutableStateOf(note.iconColorArgb) }
+    var showIconColor by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showReminder by remember { mutableStateOf(false) }
     var raw by remember { mutableStateOf(false) }
@@ -120,8 +122,9 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
         val ro = readOnly
         val tg = tags
         val vj = varsToJson(own)
+        val icc = iconColor
         vm.closeProps { n ->
-            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim(), varsJson = vj)
+            n.copy(iconKey = ic, colorArgb = b, textColorArgb = f, checklist = cl, readOnly = ro, keyword = tg.trim(), varsJson = vj, iconColorArgb = icc)
         }
     }
     BackHandler { close() }
@@ -152,8 +155,25 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                 onClick = { showIcons = true },
             ) {
                 if (shownKey != null) {
-                    NoteIcon(shownKey, legacyIconColor(note)?.takeIf { iconKey == null } ?: MaterialTheme.colorScheme.primary, 32.dp)
+                    NoteIcon(
+                        shownKey,
+                        iconColor?.let { Color(it) } ?: legacyIconColor(note)?.takeIf { iconKey == null } ?: MaterialTheme.colorScheme.primary,
+                        32.dp,
+                    )
                     IconButton(onClick = { iconKey = "" }) { Icon(Icons.Filled.Delete, "Убрать иконку") }
+                }
+            }
+            if (shownKey != null) {
+                PropRow("Цвет иконки", "Нажмите, чтобы выбрать цвет", onClick = { showIconColor = true }) {
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(iconColor?.let { Color(it) } ?: legacyIconColor(note)?.takeIf { iconKey == null } ?: MaterialTheme.colorScheme.primary),
+                    )
+                    if (iconColor != null) {
+                        IconButton(onClick = { iconColor = null }) { Icon(Icons.Filled.Delete, "Сбросить цвет иконки") }
+                    }
                 }
             }
 
@@ -243,6 +263,17 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                     if (inherited.any { it.first.name == def.name && it.first.agg == def.agg } &&
                         own.any { it.name == def.name && it.off }
                     ) emptyList() else listOf(def)
+            },
+        )
+    }
+
+    if (showIconColor) {
+        ColorPickerDialog(
+            title = "Цвет иконки",
+            onDismiss = { showIconColor = false },
+            onPick = { c ->
+                showIconColor = false
+                iconColor = c
             },
         )
     }

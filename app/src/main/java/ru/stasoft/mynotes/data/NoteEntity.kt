@@ -55,6 +55,8 @@ data class NoteEntity(
     val foldersFirst: Boolean = true,
     /** Текст показывается как список задач (чекбоксы). */
     val checklist: Boolean = false,
+    /** Цвет иконки записи (ARGB); пусто — цвет из импорта или цвет темы. */
+    val iconColorArgb: Int? = null,
     /** Оформление текста (жирный, цвет, размер, выравнивание…) отдельно от самого текста, см. Spans.kt. */
     val spansJson: String = "",
     /** Переменные папки (JSON, см. Vars.kt): действуют на папку и все вложенные. */
