@@ -57,11 +57,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Открытая в редакторе запись (null — редактор закрыт). */
     var editing by mutableStateOf<NoteEntity?>(null)
+        private set
 
     /** Несохранённые правки открытой записи (до нажатия «Сохранить»). */
     data class Draft(val id: Long, val title: String, val body: String, val spans: String)
     var draft: Draft? = null
-        private set
 
     /** Цепочка папок от корня до текущей. */
     var path by mutableStateOf<List<NoteEntity>>(emptyList())
