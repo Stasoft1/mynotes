@@ -113,7 +113,7 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
             val raw = raws[r.id]
             for (d in v.childEff) {
                 when (d.agg) {
-                    "none" -> {}
+                    "none", "calc" -> {}
                     "span" -> {
                         val a = raw?.get(d.name) ?: continue
                         val prev = below(readings[d.fieldName()], a.min)
@@ -134,7 +134,7 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
             }
         } else {
             for (d in v.eff) {
-                if (d.agg == "none") continue
+                if (d.agg == "none" || d.agg == "calc") continue
                 val n = parseNoteNumber(r.head, d.fieldName()) ?: formulaValue(d, r.head, v.eff) ?: continue
                 if (d.agg == "span") {
                     below(readings[d.fieldName()], n)?.let { values.add(d.name to n - it) }
@@ -144,11 +144,18 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
                 }
             }
         }
+        // «Расчёт по итогам»: формула по значениям этой же записи (на каждом уровне дерева, а не сумма формул).
+        val calcDefs = (if (r.isFolder) v.childEff else v.eff).filter { it.agg == "calc" && it.formula.isNotBlank() }
+        if (values.isNotEmpty()) for (d in calcDefs) {
+            val snapshot = values.toList()
+            evalFormula(d.formula) { nm -> snapshot.firstOrNull { it.first.equals(nm, ignoreCase = true) }?.second }
+                ?.let { values.add(d.name to it) }
+        }
         if (values.isEmpty()) continue
         result[r.id] = values
         if (parent == null) continue
         // В свод вверх идут только обычные значения: прирост считается заново из показаний.
-        val spanNames = v.let { (if (r.isFolder) it.childEff else it.eff).filter { d -> d.agg == "span" }.map { d -> d.name }.toSet() }
+        val spanNames = v.let { (if (r.isFolder) it.childEff else it.eff).filter { d -> d.agg == "span" || d.agg == "calc" }.map { d -> d.name }.toSet() }
         val pa = accs.getOrPut(parent) { LinkedHashMap() }
         for ((name, value) in values) if (name !in spanNames) pa.getOrPut(name) { Acc() }.add(value)
     }

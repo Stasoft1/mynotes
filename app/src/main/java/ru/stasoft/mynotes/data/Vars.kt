@@ -26,6 +26,7 @@ val AGG_LABELS = linkedMapOf(
     "max" to "Максимум",
     "min" to "Минимум",
     "span" to "Прирост (пробег за период)",
+    "calc" to "Расчёт по итогам (формула)",
     "none" to "Не показывать",
 )
 
