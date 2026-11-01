@@ -165,15 +165,21 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private suspend fun seedSnippetsOnce(db: AppDatabase) {
         val prefs = app.getSharedPreferences("app", android.content.Context.MODE_PRIVATE)
-        if (prefs.getBoolean("snippets_seeded", false)) return
         val dao = db.notes()
-        if (dao.snippetCount() == 0) {
-            DEFAULT_SNIPPETS.forEachIndexed { i, (label, text) ->
-                dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = i))
+        if (!prefs.getBoolean("snippets_seeded", false)) {
+            if (dao.snippetCount() == 0) {
+                DEFAULT_SNIPPETS.forEachIndexed { i, (label, text) ->
+                    dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = i))
+                }
             }
+            prefs.edit().putBoolean("snippets_seeded", true).apply()
         }
-        prefs.edit().putBoolean("snippets_seeded", true).apply()
         // Шаблон заявки с переменными папки: добавляется один раз, существующие шаблоны не трогаем.
+        if (!prefs.getBoolean("cable_template_seeded", false)) {
+            val sort = dao.maxSnippetSort() + 1
+            dao.insertSnippet(SnippetEntity(folderId = null, label = "Кабель: взял на склад", text = "Взял вп: \nВзял кокс: ", sortIndex = sort))
+            prefs.edit().putBoolean("cable_template_seeded", true).apply()
+        }
         if (!prefs.getBoolean("request_template_seeded", false)) {
             val sort = dao.maxSnippetSort() + 1
             dao.insertSnippet(SnippetEntity(folderId = null, label = REQUEST_TEMPLATE_LABEL, text = REQUEST_TEMPLATE, sortIndex = sort))
@@ -458,7 +464,14 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Строка отчёта: запись дерева на глубине [depth] (1 — прямое содержимое папки) и название её родителя. */
-    data class ReportRow(val id: Long, val title: String, val isFolder: Boolean, val depth: Int, val parentTitle: String)
+    data class ReportRow(
+        val id: Long,
+        val title: String,
+        val isFolder: Boolean,
+        val depth: Int,
+        val parentTitle: String,
+        val date: java.time.LocalDate?,
+    )
 
     /** Всё поддерево папки [id] (null — вся база) для отчёта, в порядке дерева; даты в названиях задают порядок. */
     suspend fun reportData(id: Long?): Pair<String?, List<ReportRow>> {
@@ -467,15 +480,16 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         return withContext(Dispatchers.Default) {
             val kids = rows.groupBy { it.parentId }
             val out = ArrayList<ReportRow>()
-            fun walk(parent: Long?, parentTitle: String, depth: Int) {
+            fun walk(parent: Long?, parentTitle: String, depth: Int, inherited: java.time.LocalDate?) {
                 val list = kids[parent].orEmpty()
                 val sorted = if (list.isNotEmpty() && list.all { dateInTitle(it.title) != null }) list.sortedBy { dateInTitle(it.title) } else list
                 for (r in sorted) {
-                    out.add(ReportRow(r.id, r.title, r.isFolder, depth, parentTitle))
-                    if (r.isFolder && depth < 12) walk(r.id, r.title, depth + 1)
+                    val date = (if (r.isFolder) dateInTitle(r.title) else null) ?: inherited
+                    out.add(ReportRow(r.id, r.title, r.isFolder, depth, parentTitle, date))
+                    if (r.isFolder && depth < 12) walk(r.id, r.title, depth + 1, date)
                 }
             }
-            walk(id, "", 1)
+            walk(id, "", 1, null)
             rows.firstOrNull { it.id == id }?.title to out
         }
     }

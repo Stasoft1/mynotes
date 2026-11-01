@@ -6,6 +6,7 @@ data class NumRow(
     val id: Long,
     val parentId: Long?,
     val isFolder: Boolean,
+    val title: String,
     val varsJson: String,
     val head: String,
 )
@@ -48,7 +49,8 @@ private class Acc {
     }
 }
 
-private class Visit(val row: NumRow, val eff: List<VarDef>, val childEff: List<VarDef>)
+/** [own] — дата в названии папки (день), [date] — своя или унаследованная от папки выше (epochDay), null — без даты. */
+private class Visit(val row: NumRow, val eff: List<VarDef>, val childEff: List<VarDef>, val own: Long?, val date: Long?)
 
 /** Наибольшее показание строго меньше [x] в отсортированном массиве. */
 private fun below(sorted: DoubleArray?, x: Double): Double? {
@@ -78,15 +80,16 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
 
     val order = ArrayList<Visit>(rows.size)
     val stack = ArrayDeque<Visit>()
-    fun visit(r: NumRow, eff: List<VarDef>) {
+    fun visit(r: NumRow, eff: List<VarDef>, inherited: Long?) {
         val childEff = if (r.isFolder && r.varsJson.isNotEmpty()) applyVars(eff, parseVars(r.varsJson)) else eff
-        stack.addLast(Visit(r, eff, childEff))
+        val own = if (r.isFolder) dateInTitle(r.title)?.toEpochDay() else null
+        stack.addLast(Visit(r, eff, childEff, own, own ?: inherited))
     }
-    kids[null]?.forEach { visit(it, emptyList()) }
+    kids[null]?.forEach { visit(it, emptyList(), null) }
     while (stack.isNotEmpty()) {
         val v = stack.removeLast()
         order.add(v)
-        if (v.row.isFolder) kids[v.row.id]?.forEach { visit(it, v.childEff) }
+        if (v.row.isFolder) kids[v.row.id]?.forEach { visit(it, v.childEff, v.date) }
     }
 
     // Все показания по полям, где действует правило span.
@@ -101,6 +104,51 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
     val readings = HashMap<String, DoubleArray>()
     for ((k, l) in readingLists) readings[k] = l.sorted().toDoubleArray()
 
+    // Накопительный остаток: вклад каждой заметки (формула по её полям, отсутствующее поле = 0) на дату её дня.
+    val byId = rows.associateBy { it.id }
+    val contribs = HashMap<String, MutableList<Pair<Long, Double>>>()
+    val lastDate = HashMap<Long, HashMap<String, Long>>()
+    val contribNotes = HashSet<Pair<Long, String>>()
+    for (v in order) {
+        if (v.row.isFolder) continue
+        for (d in v.eff) {
+            if (d.agg != "balance" || d.formula.isBlank()) continue
+            var any = false
+            val x = evalFormula(d.formula) { nm ->
+                val field = v.eff.firstOrNull { it.name.equals(nm, ignoreCase = true) }?.fieldName() ?: nm
+                parseNoteNumber(v.row.head, field)?.also { any = true } ?: 0.0
+            }
+            if (!any || x == null) continue
+            val key = v.date ?: Long.MIN_VALUE
+            contribs.getOrPut(d.name) { mutableListOf() }.add(key to x)
+            contribNotes.add(v.row.id to d.name)
+            var p = v.row.parentId
+            var guard = 0
+            while (p != null && guard++ < 64) {
+                lastDate.getOrPut(p) { HashMap() }.merge(d.name, key) { a, b -> maxOf(a, b) }
+                p = byId[p]?.parentId
+            }
+        }
+    }
+    val balDates = HashMap<String, LongArray>()
+    val balSums = HashMap<String, DoubleArray>()
+    for ((name, list) in contribs) {
+        val sorted = list.sortedBy { it.first }
+        balDates[name] = LongArray(sorted.size) { sorted[it].first }
+        var acc = 0.0
+        balSums[name] = DoubleArray(sorted.size) { acc += sorted[it].second; acc }
+    }
+    fun balanceAt(name: String, key: Long): Double? {
+        val dates = balDates[name] ?: return null
+        var lo = 0
+        var hi = dates.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (dates[mid] <= key) lo = mid + 1 else hi = mid
+        }
+        return if (lo == 0) null else balSums[name]!![lo - 1]
+    }
+
     val result = HashMap<Long, List<Pair<String, Double>>>()
     val accs = HashMap<Long, LinkedHashMap<String, Acc>>()
     val raws = HashMap<Long, LinkedHashMap<String, Acc>>() // показания (min/max) для span, по названию переменной
@@ -114,6 +162,10 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
             for (d in v.childEff) {
                 when (d.agg) {
                     "none", "calc" -> {}
+                    "balance" -> {
+                        val key = v.own ?: lastDate[r.id]?.get(d.name)
+                        if (key != null) balanceAt(d.name, key)?.let { values.add(d.name to it) }
+                    }
                     "span" -> {
                         val a = raw?.get(d.name) ?: continue
                         val prev = below(readings[d.fieldName()], a.min)
@@ -134,6 +186,10 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
             }
         } else {
             for (d in v.eff) {
+                if (d.agg == "balance") {
+                    if ((r.id to d.name) in contribNotes) balanceAt(d.name, v.date ?: Long.MIN_VALUE)?.let { values.add(d.name to it) }
+                    continue
+                }
                 if (d.agg == "none" || d.agg == "calc") continue
                 val n = parseNoteNumber(r.head, d.fieldName()) ?: formulaValue(d, r.head, v.eff) ?: continue
                 if (d.agg == "span") {
@@ -155,7 +211,7 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
         result[r.id] = values
         if (parent == null) continue
         // В свод вверх идут только обычные значения: прирост считается заново из показаний.
-        val spanNames = v.let { (if (r.isFolder) it.childEff else it.eff).filter { d -> d.agg == "span" || d.agg == "calc" }.map { d -> d.name }.toSet() }
+        val spanNames = v.let { (if (r.isFolder) it.childEff else it.eff).filter { d -> d.agg == "span" || d.agg == "calc" || d.agg == "balance" }.map { d -> d.name }.toSet() }
         val pa = accs.getOrPut(parent) { LinkedHashMap() }
         for ((name, value) in values) if (name !in spanNames) pa.getOrPut(name) { Acc() }.add(value)
     }

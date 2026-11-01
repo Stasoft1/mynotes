@@ -10,7 +10,7 @@ fun expandWithVars(text: String, vars: List<VarDef>, lookup: (String) -> Double?
     var out = expandSnippet(text)
     if (out.contains("{переменные}")) {
         val lines = vars
-            .filter { it.name.isNotEmpty() && !it.off && it.agg != "calc" }
+            .filter { it.name.isNotEmpty() && !it.off && it.agg != "calc" && it.agg != "balance" }
             .map { it.fieldName() }
             .distinct()
             .joinToString("\n") { "$it: " }

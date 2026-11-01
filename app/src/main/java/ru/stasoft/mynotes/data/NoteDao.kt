@@ -26,7 +26,7 @@ interface NoteDao {
     )
     fun withReminders(): Flow<List<NoteEntity>>
 
-    @Query("SELECT id, parentId, isFolder, varsJson, substr(body, 1, 2000) AS head FROM notes")
+    @Query("SELECT id, parentId, isFolder, title, varsJson, substr(body, 1, 2000) AS head FROM notes")
     suspend fun numRows(): List<NumRow>
 
     @Query("SELECT id, parentId, isFolder, title, substr(body, 1, 2000) AS head FROM notes")

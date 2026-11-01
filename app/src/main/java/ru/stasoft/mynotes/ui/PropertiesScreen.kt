@@ -478,6 +478,21 @@ private fun VarsSection(
         },
         modifier = Modifier.padding(horizontal = 8.dp),
     ) { Text("+ Набор для заявок: Сумма, Пробег, За период") }
+    TextButton(
+        onClick = {
+            val have = own.map { it.name }.toSet() + inherited.map { it.first.name }
+            val preset = listOf(
+                VarDef("Кабель вп", "sum"),
+                VarDef("Кабель кокс", "sum"),
+                VarDef("Взял вп", "sum"),
+                VarDef("Взял кокс", "sum"),
+                VarDef("Остаток вп", "balance", formula = "{Взял вп} - {Кабель вп}"),
+                VarDef("Остаток кокс", "balance", formula = "{Взял кокс} - {Кабель кокс}"),
+            ).filter { it.name !in have }
+            onChange(own + preset)
+        },
+        modifier = Modifier.padding(horizontal = 8.dp),
+    ) { Text("+ Набор для кабеля: расход, взял, остаток") }
 }
 
 @Composable
@@ -518,7 +533,7 @@ private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
                     TextField(
                         value = formula,
                         onValueChange = { formula = it },
-                        label = { Text("Формула, например Литры * ЦенаБ") },
+                        label = { Text("Формула, например Литры * ЦенаБ; имена с пробелами — в {скобках}") },
                         supportingText = { Text("Результат сам впишется в заметку; вручную введённое значение не трогается") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

@@ -78,6 +78,9 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
     // level: 1.. — глубина, 0 — все заметки.
     var level by remember { mutableStateOf(prefs(ctx).getInt("level_$key", 1)) }
     var hidden by remember { mutableStateOf((prefs(ctx).getString("hide_$key", "") ?: "").split("\u0001").filter { it.isNotEmpty() }.toSet()) }
+    var from by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    var to by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    var pickRange by remember { mutableStateOf(false) }
     var sortCol by remember { mutableStateOf<String?>(null) }
     var desc by remember { mutableStateOf(false) }
     LaunchedEffect(folderId) {
@@ -88,7 +91,11 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
     val maxDepth = all.maxOfOrNull { it.depth } ?: 1
     val lv = if (level > maxDepth) maxDepth else level
     val picked = if (lv == 0) all.filter { !it.isFolder } else all.filter { it.depth == lv }
-    val shown = picked.filter { !numbers[it.id].isNullOrEmpty() }
+    val ranged = if (from == null && to == null) picked else picked.filter { r ->
+        val d = r.date
+        d != null && (from == null || !d.isBefore(from)) && (to == null || !d.isAfter(to))
+    }
+    val shown = ranged.filter { !numbers[it.id].isNullOrEmpty() }
     val allNames = LinkedHashSet<String>().apply {
         shown.forEach { r -> numbers[r.id]?.forEach { add(it.first) } }
         folderId?.let { id -> numbers[id]?.forEach { add(it.first) } }
@@ -113,7 +120,7 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
         if (i >= 0) body = if (desc) body.sortedByDescending { it.second[i] ?: Double.NEGATIVE_INFINITY } else body.sortedBy { it.second[i] ?: Double.POSITIVE_INFINITY }
     }
     val totalValues = valuesOf(folderId)
-    val total = if (folderId != null && totalValues.isNotEmpty()) names.map { cell(totalValues, it) } + calcs.map { calcCell(totalValues, it) } else null
+    val total = if (from == null && to == null && folderId != null && totalValues.isNotEmpty()) names.map { cell(totalValues, it) } + calcs.map { calcCell(totalValues, it) } else null
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -144,6 +151,10 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
                         }
                     }
                     TextButton(onClick = { pickCols = true }) { Text("Столбцы…") }
+                    TextButton(onClick = { pickRange = true }) {
+                        val f = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yy")
+                        Text(if (from == null && to == null) "Период: всё" else "${from?.format(f) ?: "…"} – ${to?.format(f) ?: "…"}")
+                    }
                 }
                 if (body.isEmpty()) {
                     Text(
@@ -203,6 +214,50 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
                 }
             }
         }
+    }
+    if (pickRange) {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yy")
+        fun parse(t: String): java.time.LocalDate? {
+            val x = t.trim()
+            if (x.isEmpty()) return null
+            return try { java.time.LocalDate.parse(x, fmt) } catch (_: Exception) {
+                try { java.time.LocalDate.parse(x, java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy")) } catch (_: Exception) { null }
+            }
+        }
+        var fromText by remember { mutableStateOf(from?.format(fmt) ?: "") }
+        var toText by remember { mutableStateOf(to?.format(fmt) ?: "") }
+        AlertDialog(
+            onDismissRequest = { pickRange = false },
+            title = { Text("Период") },
+            text = {
+                Column {
+                    Text("Строки берутся по дате в названии папки дня (например 16.10.26). Записи без даты в период не попадают.", style = MaterialTheme.typography.bodySmall)
+                    TextField(value = fromText, onValueChange = { fromText = it }, label = { Text("С (дд.мм.гг), пусто — с начала") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    TextField(value = toText, onValueChange = { toText = it }, label = { Text("По (дд.мм.гг), пусто — до конца") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    Row {
+                        TextButton(onClick = {
+                            val t = java.time.LocalDate.now()
+                            fromText = t.withDayOfMonth(1).format(fmt); toText = t.withDayOfMonth(t.lengthOfMonth()).format(fmt)
+                        }) { Text("Этот месяц") }
+                        TextButton(onClick = {
+                            val t = java.time.LocalDate.now().minusMonths(1)
+                            fromText = t.withDayOfMonth(1).format(fmt); toText = t.withDayOfMonth(t.lengthOfMonth()).format(fmt)
+                        }) { Text("Прошлый") }
+                    }
+                    Row {
+                        TextButton(onClick = {
+                            val t = java.time.LocalDate.now()
+                            fromText = t.withDayOfYear(1).format(fmt); toText = t.withDayOfYear(t.lengthOfYear()).format(fmt)
+                        }) { Text("Этот год") }
+                        TextButton(onClick = { fromText = ""; toText = "" }) { Text("Всё") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { from = parse(fromText); to = parse(toText); pickRange = false }) { Text("Применить") }
+            },
+            dismissButton = { TextButton(onClick = { pickRange = false }) { Text("Отмена") } },
+        )
     }
     if (pickCols) {
         AlertDialog(

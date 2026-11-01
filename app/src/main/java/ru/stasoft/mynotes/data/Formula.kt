@@ -130,7 +130,7 @@ private fun setField(text: String, field: String, value: String): String {
 fun applyFormulas(base: String, body: String, vars: List<VarDef>): String {
     var out = body
     for (d in vars) {
-        if (d.formula.isBlank() || d.off || d.agg == "calc") continue
+        if (d.formula.isBlank() || d.off || d.agg == "calc" || d.agg == "balance") continue
         val now = formulaValue(d, out, vars) ?: continue
         val old = formulaValue(d, base, vars)
         val cur = parseNoteNumber(out, d.fieldName())
