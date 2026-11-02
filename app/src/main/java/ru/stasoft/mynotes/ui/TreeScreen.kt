@@ -1,5 +1,9 @@
 package ru.stasoft.mynotes.ui
 
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -97,8 +101,27 @@ fun TopStrip(content: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-fun StripButton(icon: ImageVector, description: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = description, tint = Color.White) }
+fun StripButton(icon: ImageVector, description: String, accent: Boolean = false, onClick: () -> Unit) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    val top = if (accent) Color(0xFFFFA85C) else Color(0xFF42536E)
+    val bottom = if (accent) Color(0xFFE5701A) else Color(0xFF273448)
+    Box(
+        Modifier
+            .padding(horizontal = 3.dp, vertical = 7.dp)
+            .size(46.dp)
+            .shadow(5.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(top, bottom)))
+            .border(
+                1.dp,
+                androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0x80FFFFFF), Color(0x14FFFFFF))),
+                shape,
+            )
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(24.dp))
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -119,6 +142,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showSort by remember { mutableStateOf(false) }
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -169,13 +193,6 @@ fun TreeScreen(vm: AppViewModel) {
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Проверка показаний…") },
-                            onClick = {
-                                menuOpen = false
-                                showCheck = true
-                            },
-                        )
-                        DropdownMenuItem(
                             text = { Text("Планировщик (напоминания)") },
                             onClick = {
                                 menuOpen = false
@@ -183,21 +200,13 @@ fun TreeScreen(vm: AppViewModel) {
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Импорт из .mtnt") },
+                            text = { Text("Настройки") },
+                            leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                             onClick = {
                                 menuOpen = false
-                                picker.launch(arrayOf("*/*"))
+                                showSettings = true
                             },
                         )
-                        if (vm.biometricAvailable()) {
-                            DropdownMenuItem(
-                                text = { Text(if (vm.biometricEnabled) "Выключить вход по отпечатку" else "Включить вход по отпечатку") },
-                                onClick = {
-                                    menuOpen = false
-                                    if (vm.biometricEnabled) vm.disableBiometric() else showBioSetup = true
-                                },
-                            )
-                        }
                         DropdownMenuItem(
                             text = { Text("Заблокировать") },
                             onClick = {
@@ -334,6 +343,13 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
+    if (showSettings) SettingsDialog(
+        vm,
+        onDismiss = { showSettings = false },
+        onImport = { showSettings = false; picker.launch(arrayOf("*/*")) },
+        onCheck = { showSettings = false; showCheck = true },
+        onBioOn = { showSettings = false; showBioSetup = true },
+    )
     if (showBioSetup) {
         BioSetupDialog(
             onDismiss = { showBioSetup = false },

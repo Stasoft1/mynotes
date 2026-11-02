@@ -56,6 +56,15 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     var message by mutableStateOf<String?>(null)
 
     /** Открытая в редакторе запись (null — редактор закрыт). */
+    /** Тема: 0 — как в системе, 1 — светлая, 2 — тёмная. */
+    var themeMode by mutableStateOf(app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).getInt("theme", 0))
+        private set
+
+    fun setTheme(mode: Int) {
+        themeMode = mode
+        app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("theme", mode).apply()
+    }
+
     var editing by mutableStateOf<NoteEntity?>(null)
         private set
 

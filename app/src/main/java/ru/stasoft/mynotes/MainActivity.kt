@@ -28,7 +28,7 @@ class MainActivity : FragmentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         setContent {
-            MyNotesTheme { AppRoot(vm) }
+            MyNotesTheme(vm.themeMode) { AppRoot(vm) }
         }
     }
 
@@ -44,8 +44,12 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun MyNotesTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+private fun MyNotesTheme(mode: Int, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        1 -> false
+        2 -> true
+        else -> isSystemInDarkTheme()
+    }
     val ctx = LocalContext.current
     val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)

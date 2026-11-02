@@ -335,7 +335,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         topBar = {
             TopStrip {
                 StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { close() }
-                StripButton(Icons.Filled.Save, if (dirty) "Сохранить" else "Сохранено") { if (!note.readOnly) saveNow() }
+                StripButton(Icons.Filled.Save, if (dirty) "Сохранить" else "Сохранено", accent = dirty) { if (!note.readOnly) saveNow() }
                 Box {
                     StripButton(Icons.Filled.Menu, "Шаблоны") { showTemplates = true }
                     DropdownMenu(expanded = showTemplates, onDismissRequest = { showTemplates = false }) {
