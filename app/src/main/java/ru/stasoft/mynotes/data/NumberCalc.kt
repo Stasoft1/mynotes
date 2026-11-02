@@ -28,7 +28,7 @@ fun parseNoteNumber(head: String, field: String): Double? {
     for (line in head.lineSequence()) {
         val i = line.indexOf(':')
         if (i <= 0) continue
-        if (line.substring(0, i).trim().lowercase() == prefix) return toNumber(line.substring(i + 1))
+        if (line.substring(0, i).trim().trim('{', '}').trim().lowercase() == prefix) return toNumber(line.substring(i + 1))
     }
     return null
 }
