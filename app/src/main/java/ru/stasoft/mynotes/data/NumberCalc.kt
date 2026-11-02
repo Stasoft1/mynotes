@@ -33,6 +33,22 @@ fun parseNoteNumber(head: String, field: String): Double? {
     return null
 }
 
+/** Сумма всех строк «Поле: число» в записи (если поле повторяется); null — такой строки нет. */
+fun parseNoteSum(head: String, field: String): Double? {
+    if (field.isEmpty()) return parseNoteNumber(head, field)
+    val prefix = field.trim().lowercase()
+    var sum = 0.0
+    var any = false
+    for (line in head.lineSequence()) {
+        val i = line.indexOf(':')
+        if (i <= 0) continue
+        if (line.substring(0, i).trim().trim('{', '}').trim().lowercase() == prefix) {
+            toNumber(line.substring(i + 1))?.let { sum += it; any = true }
+        }
+    }
+    return if (any) sum else null
+}
+
 private class Acc {
     var sum = 0.0
     var max = Double.NEGATIVE_INFINITY
@@ -116,7 +132,7 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
             var any = false
             val x = evalFormula(d.formula) { nm ->
                 val field = v.eff.firstOrNull { it.name.equals(nm, ignoreCase = true) }?.fieldName() ?: nm
-                parseNoteNumber(v.row.head, field)?.also { any = true } ?: 0.0
+                parseNoteSum(v.row.head, field)?.also { any = true } ?: 0.0
             }
             if (!any || x == null) continue
             val key = v.date ?: Long.MIN_VALUE
@@ -191,7 +207,8 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
                     continue
                 }
                 if (d.agg == "none" || d.agg == "calc") continue
-                val n = parseNoteNumber(r.head, d.fieldName()) ?: formulaValue(d, r.head, v.eff) ?: continue
+                val n = (if (d.agg == "sum") parseNoteSum(r.head, d.fieldName()) else parseNoteNumber(r.head, d.fieldName()))
+                    ?: formulaValue(d, r.head, v.eff) ?: continue
                 if (d.agg == "span") {
                     below(readings[d.fieldName()], n)?.let { values.add(d.name to n - it) }
                     if (parent != null) raws.getOrPut(parent) { LinkedHashMap() }.getOrPut(d.name) { Acc() }.add(n)
