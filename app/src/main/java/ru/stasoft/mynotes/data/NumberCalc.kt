@@ -225,7 +225,9 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
                 ?.let { values.add(d.name to it) }
         }
         if (values.isEmpty()) continue
-        result[r.id] = values
+        val hideZero = (if (r.isFolder) v.childEff else v.eff).filter { it.hideZero }.map { it.name }.toSet()
+        val shownValues = if (hideZero.isEmpty()) values else values.filter { !(it.first in hideZero && Math.abs(it.second) < 0.005) }
+        if (shownValues.isNotEmpty()) result[r.id] = shownValues
         if (parent == null) continue
         // В свод вверх идут только обычные значения: прирост считается заново из показаний.
         val spanNames = v.let { (if (r.isFolder) it.childEff else it.eff).filter { d -> d.agg == "span" || d.agg == "calc" || d.agg == "balance" }.map { d -> d.name }.toSet() }

@@ -109,7 +109,6 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
     var raw by remember { mutableStateOf(false) }
     var own by remember(note.id) { mutableStateOf(parseVars(note.varsJson)) }
     var inherited by remember(note.id) { mutableStateOf<List<Pair<VarDef, String>>>(emptyList()) }
-    var showAddVar by remember { mutableStateOf(false) }
     LaunchedEffect(note.id) { inherited = vm.inheritedVars(note) }
     val legacy = effectiveIcon(note)
     val shownKey: String? = if (iconKey == null) legacy else iconKey?.ifEmpty { null }
@@ -209,7 +208,6 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                     inherited = inherited,
                     own = own,
                     onChange = { own = it },
-                    onAdd = { showAddVar = true },
                 )
                 HorizontalDivider()
             }
@@ -251,20 +249,6 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             }
             Box(Modifier.height(24.dp))
         }
-    }
-
-    if (showAddVar) {
-        AddVarDialog(
-            onDismiss = { showAddVar = false },
-            onAdd = { def ->
-                showAddVar = false
-                // Если такая переменная была отключена в этой папке — просто возвращаем её.
-                own = own.filterNot { it.name == def.name } +
-                    if (inherited.any { it.first.name == def.name && it.first.agg == def.agg } &&
-                        own.any { it.name == def.name && it.off }
-                    ) emptyList() else listOf(def)
-            },
-        )
     }
 
     if (showIconColor) {
@@ -396,159 +380,4 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             },
         )
     }
-}
-
-@Composable
-private fun AggPicker(agg: String, onPick: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { open = true }) { Text(AGG_LABELS[agg] ?: agg) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            AGG_LABELS.forEach { (k, label) ->
-                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; onPick(k) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun VarsSection(
-    inherited: List<Pair<VarDef, String>>,
-    own: List<VarDef>,
-    onChange: (List<VarDef>) -> Unit,
-    onAdd: () -> Unit,
-) {
-    SectionTitle("ПЕРЕМЕННЫЕ")
-    Text(
-        "Поле «Имя: число» в тексте заметок. Действует в этой папке и во всех вложенных; значения сводятся вверх " +
-            "по дереву и показываются под названием.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-    val inheritedNames = inherited.map { it.first.name }.toSet()
-    inherited.forEach { (def, from) ->
-        val override = own.firstOrNull { it.name == def.name }
-        val disabled = override?.off == true
-        val agg = if (override != null && !override.off) override.agg else def.agg
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    varLabel(def.name),
-                    style = MaterialTheme.typography.titleMedium,
-                    textDecoration = if (disabled) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                )
-                Text("из папки «$from»", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (disabled) {
-                TextButton(onClick = { onChange(own.filterNot { it.name == def.name }) }) { Text("Вернуть") }
-            } else {
-                AggPicker(agg) { picked ->
-                    val rest = own.filterNot { it.name == def.name }
-                    onChange(if (picked == def.agg) rest else rest + VarDef(def.name, picked))
-                }
-                IconButton(onClick = { onChange(own.filterNot { it.name == def.name } + VarDef(def.name, def.agg, off = true)) }) {
-                    Icon(Icons.Filled.Delete, "Отключить здесь")
-                }
-            }
-        }
-    }
-    own.filter { !it.off && it.name !in inheritedNames }.forEach { def ->
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(varLabel(def.name), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    if (def.formula.isNotEmpty()) "= ${def.formula}, задана здесь"
-                    else if (def.field.isNotEmpty()) "поле «${def.field}», задана здесь" else "задана здесь", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            AggPicker(def.agg) { picked -> onChange(own.map { if (it.name == def.name) it.copy(agg = picked) else it }) }
-            IconButton(onClick = { onChange(own.filterNot { it.name == def.name }) }) { Icon(Icons.Filled.Delete, "Удалить") }
-        }
-    }
-    TextButton(onClick = onAdd, modifier = Modifier.padding(horizontal = 8.dp)) { Text("+ Добавить переменную") }
-    TextButton(
-        onClick = {
-            val have = own.map { it.name }.toSet() + inherited.map { it.first.name }
-            val preset = listOf(
-                VarDef("Сумма", "sum"),
-                VarDef("Пробег", "max"),
-                VarDef("За период", "span", field = "Пробег"),
-            ).filter { it.name !in have }
-            onChange(own + preset)
-        },
-        modifier = Modifier.padding(horizontal = 8.dp),
-    ) { Text("+ Набор для заявок: Сумма, Пробег, За период") }
-    TextButton(
-        onClick = {
-            val have = own.map { it.name }.toSet() + inherited.map { it.first.name }
-            val preset = listOf(
-                VarDef("Кабель вп", "sum"),
-                VarDef("Кабель кокс", "sum"),
-                VarDef("Взял вп", "sum"),
-                VarDef("Взял кокс", "sum"),
-                VarDef("Остаток вп", "balance", formula = "{Взял вп} - {Кабель вп}"),
-                VarDef("Остаток кокс", "balance", formula = "{Взял кокс} - {Кабель кокс}"),
-            ).filter { it.name !in have }
-            onChange(own + preset)
-        },
-        modifier = Modifier.padding(horizontal = 8.dp),
-    ) { Text("+ Набор для кабеля: расход, взял, остаток") }
-}
-
-@Composable
-private fun AddVarDialog(onDismiss: () -> Unit, onAdd: (VarDef) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var agg by remember { mutableStateOf("sum") }
-    var firstLine by remember { mutableStateOf(false) }
-    var field by remember { mutableStateOf("") }
-    var formula by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая переменная") },
-        text = {
-            Column {
-                Row(Modifier.fillMaxWidth().clickable { firstLine = !firstLine }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = firstLine, onCheckedChange = { firstLine = it })
-                    Text("Число в первой строке заметки")
-                }
-                if (!firstLine) {
-                    TextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Название поля, например Сумма") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (!firstLine) {
-                    TextField(
-                        value = field,
-                        onValueChange = { field = it },
-                        label = { Text("Поле в тексте, если называется иначе") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                }
-                if (!firstLine) {
-                    TextField(
-                        value = formula,
-                        onValueChange = { formula = it },
-                        label = { Text("Формула, например Литры * ЦенаБ; имена с пробелами — в {скобках}") },
-                        supportingText = { Text("Результат сам впишется в заметку; вручную введённое значение не трогается") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                }
-                Text("Как сводить вверх по дереву", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
-                AggPicker(agg) { agg = it }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = firstLine || name.isNotBlank(),
-                onClick = { onAdd(VarDef(if (firstLine) "" else name.trim().trimEnd(':'), agg, field = if (firstLine) "" else field.trim().trimEnd(':'), formula = if (firstLine) "" else formula.trim())) },
-            ) { Text("Добавить") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
-    )
 }

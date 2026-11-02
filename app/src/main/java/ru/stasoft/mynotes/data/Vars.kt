@@ -17,6 +17,8 @@ data class VarDef(
     val field: String = "",
     /** Формула по другим переменным заметки, например «Литры * ЦенаБ». Пусто — обычное поле. */
     val formula: String = "",
+    /** Не показывать значение, когда оно равно нулю. */
+    val hideZero: Boolean = false,
 )
 
 fun VarDef.fieldName(): String = field.ifEmpty { name }
@@ -45,6 +47,7 @@ fun parseVars(json: String): List<VarDef> {
                 o.optBoolean("off", false),
                 o.optString("f", ""),
                 o.optString("x", ""),
+                o.optBoolean("hz", false),
             )
         }
     } catch (_: Exception) {
@@ -60,6 +63,7 @@ fun varsToJson(list: List<VarDef>): String {
             if (it.off) put("off", true)
             if (it.field.isNotEmpty()) put("f", it.field)
             if (it.formula.isNotEmpty()) put("x", it.formula)
+            if (it.hideZero) put("hz", true)
         })
     }
     return arr.toString()
