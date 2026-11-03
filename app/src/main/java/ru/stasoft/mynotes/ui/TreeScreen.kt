@@ -139,6 +139,12 @@ fun TreeScreen(vm: AppViewModel) {
     var deleteTarget by remember { mutableStateOf<NoteEntity?>(null) }
     var showBioSetup by remember { mutableStateOf(false) }
     var showSnippets by remember { mutableStateOf(false) }
+    LaunchedEffect(vm.reopenTemplates) {
+        if (vm.reopenTemplates) {
+            vm.reopenTemplates = false
+            showSnippets = true
+        }
+    }
     var showSort by remember { mutableStateOf(false) }
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }

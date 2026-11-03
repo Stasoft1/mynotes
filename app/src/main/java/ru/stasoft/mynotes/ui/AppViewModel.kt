@@ -36,6 +36,10 @@ import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.SnippetEntity
 import ru.stasoft.mynotes.data.FolderTitle
 import ru.stasoft.mynotes.data.ReadingIssue
+import ru.stasoft.mynotes.data.expandWithVars
+import ru.stasoft.mynotes.data.expandSnippet
+import ru.stasoft.mynotes.data.parseSpans
+import ru.stasoft.mynotes.data.spansToJson
 import ru.stasoft.mynotes.data.dateInTitle
 import ru.stasoft.mynotes.data.VarDef
 import ru.stasoft.mynotes.data.computeNumbers
@@ -578,6 +582,79 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private var justCreated: Created? = null
 
+    /** Нужно снова показать список шаблонов (после правки шаблона). */
+    var reopenTemplates by mutableStateOf(false)
+
+    /** Открывает шаблон в обычном редакторе: название шаблона-заметки и текст с оформлением. */
+    fun editSnippet(s: SnippetEntity) {
+        justCreated = null
+        editing = NoteEntity(id = -s.id, title = s.title, body = s.text, spansJson = s.spansJson)
+        editingChain = emptyList()
+    }
+
+    fun newSnippet(label: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val id = dao.insertSnippet(
+                SnippetEntity(folderId = folderId.value, label = label, text = "", sortIndex = dao.maxSnippetSort() + 1),
+            )
+            dao.allSnippetsOnce().firstOrNull { it.id == id }?.let { editSnippet(it) }
+        }
+    }
+
+    fun renameSnippet(s: SnippetEntity, label: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.updateSnippet(s.copy(label = label)) }
+    }
+
+    /**
+     * Подставляет в шаблон переменные папки ({переменные}, {Имя}, {сегодня}…) и переносит оформление на новый текст.
+     * Возвращает готовый текст и оформление (JSON).
+     */
+    suspend fun expandTemplate(text: String, spansJson: String, parentId: Long?): Pair<String, String> {
+        val dao = dao() ?: return text to spansJson
+        val vars = if (parentId == null) emptyList() else inheritedVars(NoteEntity(parentId = parentId)).map { it.first }
+        val chain = mutableListOf<Long>()
+        var cur = parentId
+        while (cur != null && chain.size < 64) {
+            chain.add(cur)
+            cur = dao.get(cur)?.parentId
+        }
+        val values = numbers.value
+        val lookup: (String) -> Double? = { name ->
+            chain.firstNotNullOfOrNull { id -> values[id]?.firstOrNull { it.first.equals(name, ignoreCase = true) }?.second }
+        }
+        val out = expandWithVars(text, vars, lookup)
+        if (spansJson.isEmpty()) return out to ""
+        val spans = parseSpans(spansJson, text.length)
+        if (out == text) return out to spansJson
+        fun map(pos: Int): Int = expandWithVars(text.substring(0, pos.coerceIn(0, text.length)), vars, lookup).length
+        val mapped = spans.map { it.copy(start = map(it.start), end = map(it.end)) }.filter { it.end > it.start }
+        return out to spansToJson(mapped)
+    }
+
+    /** Создаёт заметку из шаблона в текущей папке и открывает её. */
+    fun newFromSnippet(s: SnippetEntity) {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val parent = folderId.value
+            val (text, spans) = expandTemplate(s.text, s.spansJson, parent)
+            val id = dao.insert(
+                NoteEntity(
+                    parentId = parent, title = expandSnippet(s.title), body = text, spansJson = spans,
+                    sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now,
+                ),
+            )
+            justCreated = Created(id, parent, true)
+            selectedId = id
+            dao.get(id)?.let {
+                editing = it
+                loadChain(it)
+            }
+        }
+    }
+
     /** Кнопка «+»: новая пустая заметка в текущей папке, сразу открывается редактор. */
     fun newNote() {
         val dao = dao() ?: return
@@ -750,6 +827,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = dao()
         val cur = editing
         val jc = justCreated
+        if (cur != null && cur.id < 0) {
+            // Закрыли правку шаблона: возвращаемся к списку шаблонов.
+            editing = null
+            justCreated = null
+            reopenTemplates = true
+            return
+        }
         if (cur != null) {
             selectedId = cur.id
             scrollTick++
@@ -773,6 +857,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun save(id: Long, title: String, body: String, spans: String? = null) {
         val dao = dao() ?: return
         viewModelScope.launch {
+            if (id < 0) {
+                // Правка шаблона: «заметка» с отрицательным id — это шаблон -id.
+                val sn = allSnippets.value.firstOrNull { it.id == -id } ?: return@launch
+                dao.updateSnippet(sn.copy(title = title, text = body, spansJson = spans ?: sn.spansJson))
+                editing?.let { if (it.id == id) editing = it.copy(title = title, body = body, spansJson = spans ?: sn.spansJson) }
+                return@launch
+            }
             val cur = dao.get(id) ?: return@launch
             val sp = spans ?: cur.spansJson
             if (cur.title == title && cur.body == body && cur.spansJson == sp) return@launch

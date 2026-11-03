@@ -51,6 +51,9 @@ interface NoteDao {
     @Query("SELECT * FROM snippets ORDER BY sortIndex ASC, id ASC")
     fun allSnippets(): Flow<List<SnippetEntity>>
 
+    @Query("SELECT * FROM snippets")
+    suspend fun allSnippetsOnce(): List<SnippetEntity>
+
     @Query("SELECT COUNT(*) FROM snippets")
     suspend fun snippetCount(): Int
 

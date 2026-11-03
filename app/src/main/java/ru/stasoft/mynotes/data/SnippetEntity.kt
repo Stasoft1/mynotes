@@ -27,4 +27,8 @@ data class SnippetEntity(
     val label: String,
     val text: String,
     val sortIndex: Int = 0,
+    /** Название будущей заметки (пусто — не менять название). */
+    val title: String = "",
+    /** Оформление текста шаблона (см. Spans). */
+    val spansJson: String = "",
 )
