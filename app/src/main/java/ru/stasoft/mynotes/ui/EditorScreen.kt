@@ -351,14 +351,18 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                                     // Вставляем туда, где сейчас курсор: в название или в текст.
                                     scope.launch {
                                         val (text, spansJ) = vm.expandTemplate(sn.text, sn.spansJson, note.parentId)
+                                        // Шаблон без заголовка вставляется туда, где курсор (как раньше). Шаблон с заголовком:
+                                        // заголовок — в название (если оно пустое), текст — всегда в тело заметки.
+                                        val intoTitle = titleFocused && sn.title.isBlank()
                                         if (sn.title.isNotBlank() && titleField.text.isBlank()) {
                                             titleField = TextFieldValue(ru.stasoft.mynotes.data.expandSnippet(sn.title))
                                         }
                                         if (note.checklist) checklist.addLines(text)
+                                        else if (intoTitle) setCurrent(current().replaceSelection(text))
                                         else {
-                                            val start = if (titleFocused) 0 else bodyField.selection.min
-                                            setCurrent(current().replaceSelection(text))
-                                            if (!titleFocused && spansJ.isNotEmpty()) {
+                                            val start = bodyField.selection.min
+                                            updateBody(bodyField.replaceSelection(text))
+                                            if (spansJ.isNotEmpty()) {
                                                 val add = parseSpans(spansJ, text.length).map { it.copy(start = it.start + start, end = it.end + start) }
                                                 spans = ru.stasoft.mynotes.data.normalize(spans + add)
                                             }
