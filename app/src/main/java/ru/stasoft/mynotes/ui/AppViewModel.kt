@@ -64,6 +64,15 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     var themeMode by mutableStateOf(app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).getInt("theme", 0))
         private set
 
+    /** Стиль кнопок: 0 — объёмные, 1 — стеклянные. */
+    var buttonStyle by mutableStateOf(app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).getInt("buttons", 0))
+        private set
+
+    fun setButtonStyle(style: Int) {
+        buttonStyle = style
+        app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("buttons", style).apply()
+    }
+
     fun setTheme(mode: Int) {
         themeMode = mode
         app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("theme", mode).apply()

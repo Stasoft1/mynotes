@@ -13,6 +13,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
     companion object {
+        /** Версия схемы (для проверки копий). */
+        const val VERSION = 9
+
+        /** Последняя открытая база: нужна резервным копиям, чтобы сбросить журнал перед копированием. */
+        @Volatile
+        var current: AppDatabase? = null
+
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE notes ADD COLUMN sortMode INTEGER NOT NULL DEFAULT 0")
@@ -88,6 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .openHelperFactory(factory)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
+                .also { current = it }
         }
     }
 }

@@ -168,14 +168,15 @@ fun LockScreen(vm: AppViewModel) {
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
         }
         Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(
+            AppButton(
+                text = if (vm.needSetup) "Создать" else "Открыть",
                 onClick = {
                     vm.submitPassword(password, if (vm.needSetup) confirm else null)
                     password = ""
                     confirm = ""
                 },
                 enabled = !vm.busy,
-            ) { Text(if (vm.needSetup) "Создать" else "Открыть") }
+            )
             if (canBio) {
                 androidx.compose.material3.IconButton(onClick = promptBio, modifier = Modifier.padding(start = 8.dp)) {
                     androidx.compose.material3.Icon(

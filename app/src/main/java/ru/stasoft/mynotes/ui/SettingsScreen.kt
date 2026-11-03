@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FactCheck
@@ -37,6 +38,7 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
     onImport: () -> Unit,
     onCheck: () -> Unit,
+    onBackup: () -> Unit,
     onBioOn: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -60,6 +62,16 @@ fun SettingsDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(selected = vm.themeMode == mode, onClick = { vm.setTheme(mode) })
+                            Text(label, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                    SettingsTitle("Кнопки")
+                    listOf(0 to "Объёмные", 1 to "Стеклянные (пастельные)").forEach { (style, label) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { vm.setButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = vm.buttonStyle == style, onClick = { vm.setButtonStyle(style) })
                             Text(label, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
@@ -95,6 +107,7 @@ fun SettingsDialog(
                     }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("Данные")
+                    SettingsAction(Icons.Filled.Backup, "Резервные копии…", "Расписание, папка (Google Диск), восстановление", onBackup)
                     SettingsAction(Icons.Filled.FileUpload, "Импорт из .mtnt", "Загрузить базу MyTreeNotes в корень", onImport)
                     SettingsAction(Icons.Filled.FactCheck, "Проверка показаний…", "Найти ошибки в пробеге и других показаниях", onCheck)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))

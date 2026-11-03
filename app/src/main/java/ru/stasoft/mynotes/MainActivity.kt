@@ -28,7 +28,11 @@ class MainActivity : FragmentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         setContent {
-            MyNotesTheme(vm.themeMode) { AppRoot(vm) }
+            MyNotesTheme(vm.themeMode) {
+                androidx.compose.runtime.CompositionLocalProvider(ru.stasoft.mynotes.ui.LocalButtonStyle provides vm.buttonStyle) {
+                    AppRoot(vm)
+                }
+            }
         }
     }
 

@@ -10,6 +10,11 @@ class MyNotesApp : Application() {
         // Нативная библиотека SQLCipher должна быть загружена до первого открытия базы.
         System.loadLibrary("sqlcipher")
         try {
+            ru.stasoft.mynotes.backup.BackupScheduler.apply(this)
+        } catch (e: Exception) {
+            android.util.Log.e("MyNotes", "backup schedule failed", e)
+        }
+        try {
             ReminderNotifier.ensureChannel(this)
             ReminderScheduler.rescheduleAll(this)
         } catch (e: Exception) {

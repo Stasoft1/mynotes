@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,10 +89,17 @@ private val BarColor = Color(0xFF1B2330)
 /** Тёмная панель кнопок сверху, листается по горизонтали (как в MyTreeNotes). */
 @Composable
 fun TopStrip(content: @Composable RowScope.() -> Unit) {
+    val glass = LocalButtonStyle.current == 1
+    val dark = androidx.compose.material3.MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.SideEffect {
+        val w = (view.context as? android.app.Activity)?.window
+        if (w != null) androidx.core.view.WindowCompat.getInsetsController(w, view).isAppearanceLightStatusBars = glass && !dark
+    }
     Row(
         Modifier
             .fillMaxWidth()
-            .background(BarColor)
+            .background(if (glass) androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow else BarColor)
             .statusBarsPadding()
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 4.dp),
@@ -102,6 +110,18 @@ fun TopStrip(content: @Composable RowScope.() -> Unit) {
 
 @Composable
 fun StripButton(icon: ImageVector, description: String, accent: Boolean = false, onClick: () -> Unit) {
+    if (LocalButtonStyle.current == 1) {
+        val dark = androidx.compose.material3.MaterialTheme.colorScheme.surface.luminance() < 0.5f
+        GlassBox(
+            Modifier.padding(horizontal = 4.dp, vertical = 7.dp).size(46.dp),
+            androidx.compose.foundation.shape.CircleShape,
+            if (accent) Color(0xFFFFB27A) else pastelFor(description),
+            onClick,
+        ) {
+            Icon(icon, contentDescription = description, tint = if (dark) Color.White else Color(0xFF1F2430), modifier = Modifier.size(24.dp))
+        }
+        return
+    }
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
     val top = if (accent) Color(0xFFFFA85C) else Color(0xFF42536E)
     val bottom = if (accent) Color(0xFFE5701A) else Color(0xFF273448)
@@ -148,6 +168,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showSort by remember { mutableStateOf(false) }
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
+    var showBackup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -349,11 +370,13 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
+    if (showBackup) BackupDialog(vm, onDismiss = { showBackup = false })
     if (showSettings) SettingsDialog(
         vm,
         onDismiss = { showSettings = false },
         onImport = { showSettings = false; picker.launch(arrayOf("*/*")) },
         onCheck = { showSettings = false; showCheck = true },
+        onBackup = { showSettings = false; showBackup = true },
         onBioOn = { showSettings = false; showBioSetup = true },
     )
     if (showBioSetup) {
