@@ -588,7 +588,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Открывает шаблон в обычном редакторе: название шаблона-заметки и текст с оформлением. */
     fun editSnippet(s: SnippetEntity) {
         justCreated = null
-        editing = NoteEntity(id = -s.id, title = s.title, body = s.text, spansJson = s.spansJson)
+        editing = NoteEntity(id = -s.id, title = s.title, body = s.text, spansJson = s.spansJson, createdAt = 0L, updatedAt = 0L)
         editingChain = emptyList()
     }
 
@@ -613,7 +613,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
      */
     suspend fun expandTemplate(text: String, spansJson: String, parentId: Long?): Pair<String, String> {
         val dao = dao() ?: return text to spansJson
-        val vars = if (parentId == null) emptyList() else inheritedVars(NoteEntity(parentId = parentId)).map { it.first }
+        val vars = if (parentId == null) emptyList() else inheritedVars(NoteEntity(parentId = parentId, createdAt = 0L, updatedAt = 0L)).map { it.first }
         val chain = mutableListOf<Long>()
         var cur = parentId
         while (cur != null && chain.size < 64) {
