@@ -170,7 +170,7 @@ fun BackupDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Switch(checked = auto, onCheckedChange = { auto = it; savePrefs() })
+                        AppSwitch(checked = auto, onCheckedChange = { auto = it; savePrefs() })
                     }
                     if (auto) {
                         listOf(24 to "Каждый день", 72 to "Раз в 3 дня", 168 to "Раз в неделю").forEach { (h, label) ->
@@ -178,7 +178,7 @@ fun BackupDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                                 Modifier.fillMaxWidth().clickable { hours = h; savePrefs() }.padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                RadioButton(selected = hours == h, onClick = { hours = h; savePrefs() })
+                                AppRadio(selected = hours == h, onClick = { hours = h; savePrefs() })
                                 Text(label, modifier = Modifier.padding(start = 8.dp))
                             }
                         }
@@ -197,7 +197,7 @@ fun BackupDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     Text("Хранить копий", modifier = Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         listOf(5, 10, 30).forEach { n ->
-                            RadioButton(selected = keep == n, onClick = { keep = n; savePrefs() })
+                            AppRadio(selected = keep == n, onClick = { keep = n; savePrefs() })
                             Text("$n", modifier = Modifier.clickable { keep = n; savePrefs() }.padding(end = 12.dp))
                         }
                     }

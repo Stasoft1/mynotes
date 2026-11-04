@@ -255,7 +255,15 @@ fun TreeScreen(vm: AppViewModel) {
         },
     ) { padding ->
         Column(Modifier.padding(padding)) {
-            if (searching) {
+            if (searching && LocalButtonStyle.current == 1) {
+                GlassTextField(
+                    value = query,
+                    onValueChange = { vm.query.value = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    placeholder = "Поиск по всей базе",
+                    leading = Icons.Filled.Search,
+                )
+            } else if (searching) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { vm.query.value = it },
@@ -648,16 +656,16 @@ private fun SortDialog(vm: AppViewModel, onDismiss: () -> Unit) {
             Column {
                 Text("Только текущая папка", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
                 Row(Modifier.fillMaxWidth().clickable { mode = if (auto) 0 else 1 }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = auto, onCheckedChange = { mode = if (it) 1 else 0 })
+                    AppCheckbox(checked = auto, onCheckedChange = { mode = if (it) 1 else 0 })
                     Text("Автоматическая")
                 }
                 Row(Modifier.fillMaxWidth().clickable { folders = !folders }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = folders, onCheckedChange = { folders = it })
+                    AppCheckbox(checked = folders, onCheckedChange = { folders = it })
                     Text("Папки сверху")
                 }
                 SORT_MODES.forEach { (m, label) ->
                     Row(Modifier.fillMaxWidth().clickable { mode = m }, verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = mode == m, onClick = { mode = m })
+                        AppRadio(selected = mode == m, onClick = { mode = m })
                         Text(label)
                     }
                 }

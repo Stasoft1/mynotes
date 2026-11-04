@@ -253,7 +253,7 @@ private fun VarEditDialog(
                 }
                 if (isNew) {
                     Row(Modifier.fillMaxWidth().clickable { firstLine = !firstLine }, verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = firstLine, onCheckedChange = { firstLine = it })
+                        AppCheckbox(checked = firstLine, onCheckedChange = { firstLine = it })
                         Text("Число в первой строке заметки")
                     }
                     if (!firstLine) {
@@ -329,7 +329,7 @@ private fun VarEditDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(checked = hideZero, onCheckedChange = { hideZero = it })
+                    AppSwitch(checked = hideZero, onCheckedChange = { hideZero = it })
                 }
                 if (!isNew) {
                     Spacer(Modifier.height(4.dp))

@@ -23,6 +23,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +44,8 @@ fun SettingsDialog(
     onBioOn: () -> Unit,
 ) {
     val ctx = LocalContext.current
+    var showKit by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (showKit) GlassKitDialog(onDismiss = { showKit = false })
     val version = remember(ctx) {
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
     }
@@ -61,7 +65,7 @@ fun SettingsDialog(
                             Modifier.fillMaxWidth().clickable { vm.setTheme(mode) }.padding(horizontal = 16.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = vm.themeMode == mode, onClick = { vm.setTheme(mode) })
+                            AppRadio(selected = vm.themeMode == mode, onClick = { vm.setTheme(mode) })
                             Text(label, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
@@ -71,10 +75,14 @@ fun SettingsDialog(
                             Modifier.fillMaxWidth().clickable { vm.chooseButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = vm.buttonStyle == style, onClick = { vm.chooseButtonStyle(style) })
+                            AppRadio(selected = vm.buttonStyle == style, onClick = { vm.chooseButtonStyle(style) })
                             Text(label, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
+                    androidx.compose.material3.TextButton(
+                        onClick = { showKit = true },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    ) { Text("Посмотреть стеклянный набор…") }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("Безопасность")
                     if (vm.biometricAvailable()) {
@@ -93,7 +101,7 @@ fun SettingsDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Switch(
+                            AppSwitch(
                                 checked = vm.biometricEnabled,
                                 onCheckedChange = { if (it) onBioOn() else vm.disableBiometric() },
                             )

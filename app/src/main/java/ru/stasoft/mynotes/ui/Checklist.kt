@@ -92,7 +92,7 @@ fun ChecklistBody(state: ChecklistState, readOnly: Boolean, modifier: Modifier =
             }
             val textColor = if (item.checked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
+                AppCheckbox(
                     checked = item.checked,
                     enabled = !readOnly,
                     onCheckedChange = { item.checked = it },

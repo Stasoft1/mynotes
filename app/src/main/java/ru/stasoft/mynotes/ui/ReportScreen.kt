@@ -273,7 +273,7 @@ fun ReportDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
                             },
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
-                            Checkbox(checked = n !in hidden, onCheckedChange = null)
+                            AppCheckbox(checked = n !in hidden, onCheckedChange = null)
                             Text(n.ifEmpty { "Число (первая строка)" }, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp))
                         }
                     }

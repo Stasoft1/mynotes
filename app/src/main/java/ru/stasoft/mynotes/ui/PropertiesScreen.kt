@@ -200,7 +200,7 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             }
             HorizontalDivider()
             PropRow("Текст в виде списка", "Отобразить текст как список задач", onClick = { checklist = !checklist }) {
-                Checkbox(checked = checklist, onCheckedChange = { checklist = it })
+                AppCheckbox(checked = checklist, onCheckedChange = { checklist = it })
             }
             HorizontalDivider()
             if (note.isFolder) {
@@ -228,7 +228,7 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
             }
             HorizontalDivider()
             PropRow("Запретить редактирование", "Запретить редактирование данных в заметке", onClick = { readOnly = !readOnly }) {
-                Checkbox(checked = readOnly, onCheckedChange = { readOnly = it })
+                AppCheckbox(checked = readOnly, onCheckedChange = { readOnly = it })
             }
 
             SectionTitle("ИНФОРМАЦИЯ")
