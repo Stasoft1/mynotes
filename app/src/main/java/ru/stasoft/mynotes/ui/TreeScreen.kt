@@ -518,6 +518,7 @@ private fun NoteRow(
                 }
             }
         }
+        if (!note.isFolder && note.body.isNotEmpty()) LinkButtons(note.displayTitle(), note.body)
         NoteIcon(
             effectiveIcon(note),
             note.iconColorArgb?.let { Color(it) } ?: legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary,
