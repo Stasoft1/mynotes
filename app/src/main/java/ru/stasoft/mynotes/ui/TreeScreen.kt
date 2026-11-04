@@ -319,7 +319,7 @@ fun TreeScreen(vm: AppViewModel) {
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                    Text("📂", style = MaterialTheme.typography.titleLarge)
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(
                             resolveTitle(cur.displayTitle(), numbers[cur.id]).ifBlank { "Без названия" },
