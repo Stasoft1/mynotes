@@ -68,7 +68,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     var buttonStyle by mutableStateOf(app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).getInt("buttons", 0))
         private set
 
-    fun setButtonStyle(style: Int) {
+    fun chooseButtonStyle(style: Int) {
         buttonStyle = style
         app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("buttons", style).apply()
     }

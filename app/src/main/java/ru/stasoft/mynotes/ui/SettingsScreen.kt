@@ -68,10 +68,10 @@ fun SettingsDialog(
                     SettingsTitle("Кнопки")
                     listOf(0 to "Объёмные", 1 to "Стеклянные (пастельные)").forEach { (style, label) ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { vm.setButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 2.dp),
+                            Modifier.fillMaxWidth().clickable { vm.chooseButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = vm.buttonStyle == style, onClick = { vm.setButtonStyle(style) })
+                            RadioButton(selected = vm.buttonStyle == style, onClick = { vm.chooseButtonStyle(style) })
                             Text(label, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
