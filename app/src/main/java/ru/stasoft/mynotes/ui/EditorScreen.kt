@@ -130,6 +130,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var pending by remember(note.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     // Позиция только что вставленного Enter: продолжение списка делается чуть позже, когда клавиатура закончила правку.
     var enterAt by remember(note.id) { mutableStateOf(-1 to 0) }
+    var pasteAt by remember(note.id) { mutableStateOf(0) }
+    var undoReq by remember(note.id) { mutableStateOf<Pair<String, String>?>(null) }
     val skipEnter = remember(note.id) { java.util.concurrent.atomic.AtomicBoolean(false) }
     var showTextColor by remember { mutableStateOf(false) }
     var showBgColor by remember { mutableStateOf(false) }
@@ -254,6 +256,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         spans = mapSpansForEdit(spans, p, removed, inserted, typing)
         pending = emptyMap()
         bodyField = v
+        if (a.isEmpty() && b.length >= 40 && !titleFocused && !note.readOnly && !note.checklist && note.id >= 0 &&
+            ru.stasoft.mynotes.data.looksLikeRequest(b)) pasteAt++
     }
 
     LaunchedEffect(enterAt) {
@@ -331,6 +335,24 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             .sortedWith(compareBy<SnippetEntity>({ depth(it) }, { it.sortIndex }, { it.id }))
     }
 
+    suspend fun convertRequestNow(): Boolean {
+        val raw = bodyField.text
+        val sn = snippets.firstOrNull { val l = it.label.trim().lowercase(); l.startsWith("ф1") || l.startsWith("f1") }
+        val skeleton = sn?.let { vm.expandTemplate(it.text, it.spansJson, note.parentId).first.lines() }
+        val r = ru.stasoft.mynotes.data.convertRequest(raw, skeleton) ?: return false
+        undoReq = raw to titleField.text
+        updateBody(TextFieldValue(r.body, androidx.compose.ui.text.TextRange(r.body.length)))
+        spans = parseSpans("", r.body.length)
+        if (titleField.text.isBlank()) titleField = TextFieldValue(r.title)
+        return true
+    }
+    LaunchedEffect(pasteAt) {
+        if (pasteAt > 0) {
+            delay(80)
+            if (convertRequestNow()) android.widget.Toast.makeText(ctxToast, "Заявка приведена к шаблону Ф1", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopStrip {
@@ -342,6 +364,16 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                         if (snippets.isEmpty()) {
                             DropdownMenuItem(text = { Text("Шаблонов нет") }, onClick = { showTemplates = false }, enabled = false)
                         }
+                        DropdownMenuItem(
+                            text = { Text("Привести заявку к Ф1") },
+                            enabled = !note.readOnly && !note.checklist,
+                            onClick = {
+                                showTemplates = false
+                                scope.launch {
+                                    if (!convertRequestNow()) android.widget.Toast.makeText(ctxToast, "Текст не похож на заявку", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        )
                         snippets.forEach { sn ->
                             DropdownMenuItem(
                                 text = { Text(sn.label, maxLines = 2) },
@@ -401,6 +433,18 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             )
             if (note.reminderAt != null) {
                 ReminderRow(note = note, onEdit = { showReminderDialog = true })
+            }
+            undoReq?.let { u ->
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("Заявка приведена к шаблону Ф1", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        updateBody(TextFieldValue(u.first))
+                        spans = parseSpans("", u.first.length)
+                        titleField = TextFieldValue(u.second)
+                        undoReq = null
+                    }) { Text("Вернуть") }
+                    TextButton(onClick = { undoReq = null }) { Text("Ок") }
+                }
             }
             if (note.checklist) {
                 ChecklistBody(checklist, note.readOnly, Modifier.fillMaxWidth().weight(1f))
