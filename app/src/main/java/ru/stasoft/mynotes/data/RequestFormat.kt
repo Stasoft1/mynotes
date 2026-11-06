@@ -12,7 +12,7 @@ private val MASK = "[\\dхХxX*]"
 private val PHONE_RE = Regex("(?:\\+7|(?<!\\d)8)[\\s(\\-]*$MASK{3}[\\s)\\-]*$MASK{3}[\\s\\-]*$MASK{2}[\\s\\-]*$MASK{2}")
 private val CONTRACT_RE = Regex("Договор\\s*№?\\s*:?\\s*([\\p{L}\\p{N}*-]+)")
 private val ADDR_RE = Regex("Адрес:\\s*(.*?)(?=,?\\s*(?:Парадная|Этаж|Квартира|Заявка)|$)")
-private val STREET_TYPES = Regex("(?<!\\p{L})(?:ул|ул\\.|улица|пр|пр\\.|пр-т|просп|проспект|бул|бульвар|наб|набережная|пер|переулок|ш|шоссе)(?!\\p{L})\\.?", RegexOption.IGNORE_CASE)
+private val STREET_TYPES = Regex("(?<!\\p{L})(?:ул|ул\\.|улица|пр-кт|пр-т|пр|пр\\.|просп|проспект|бул|бульвар|наб|набережная|пер|переулок|ш|шоссе)(?!\\p{L})\\.?", RegexOption.IGNORE_CASE)
 
 fun looksLikeRequest(text: String): Boolean =
     Regex("Заявка:\\s*\\d+").containsMatchIn(text) || (text.contains("Данные клиента") && text.contains("Договор"))
@@ -31,7 +31,7 @@ private fun sentenceCase(s: String): String {
 private fun formatAddress(addrRaw: String, flatIn: String?): String {
     var a = addrRaw.replace(Regex(",?\\s*(?:кв\\.?|квартира)\\s*\\.?\\s*\\d+\\w*\\s*$", RegexOption.IGNORE_CASE), "")
     a = a.replace(STREET_TYPES, " ").replace(",", " ").replace(Regex("\\s+"), " ").trim()
-    val m = Regex("^(.*?)\\s+(\\d+[а-яА-Яa-zA-Z]?)(?:\\s*(?:к|корп\\.?|корпус)\\s*(\\d+))?(?:\\s.*)?$").find(a)
+    val m = Regex("^(.*?)\\s+(\\d+[а-яА-Яa-zA-Z]?)(?:\\s*(?:к|корп\\.?|корпус|/)\\s*(\\d+))?(?:\\s.*)?$").find(a)
     var res = if (m != null) {
         val street = m.groupValues[1].trim()
         street + " " + m.groupValues[2] + (if (m.groupValues[3].isNotEmpty()) "-" + m.groupValues[3] else "")
@@ -105,6 +105,7 @@ fun convertRequest(rawIn: String, skeleton: List<String>?): Converted? {
         }
     }
     flush()
+    if (speed.isEmpty()) Regex("(\\d+)\\s*мбит", RegexOption.IGNORE_CASE).find(left)?.let { speed = it.groupValues[1] + " мбит" }
     val note = sentences.joinToString(" ") { "$it." }
 
     val vals = mapOf(
