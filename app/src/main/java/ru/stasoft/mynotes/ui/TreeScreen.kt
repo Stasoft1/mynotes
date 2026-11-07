@@ -1,6 +1,22 @@
 package ru.stasoft.mynotes.ui
 
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
@@ -355,22 +371,140 @@ fun TreeScreen(vm: AppViewModel) {
                     if (!visible) listState.scrollToItem(i)
                 }
             }
+            // ---- перетаскивание: долгий тап поднимает строку, дальше её можно двигать по списку ----
+            val currentSort by vm.sortMode.collectAsState()
+            val canDrag = query.isBlank() && currentSort == 0
+            val itemsNow by rememberUpdatedState(items)
+            val haptic = LocalHapticFeedback.current
+            var dragId by remember { mutableStateOf<Long?>(null) }
+            var dragDy by remember { mutableFloatStateOf(0f) }
+            var dragAcc by remember { mutableFloatStateOf(0f) }
+            var dragMoved by remember { mutableStateOf(false) }
+            var order by remember { mutableStateOf<List<NoteEntity>?>(null) }
+            var askManual by remember { mutableStateOf(false) }
+            val shown = order ?: items
+            LaunchedEffect(folderId) { order = null; dragId = null; dragDy = 0f }
+            LaunchedEffect(items) {
+                val o = order
+                if (o != null && dragId == null && o.map { it.id } == items.map { it.id }) order = null
+            }
+
+            fun checkSwap() {
+                val id = dragId ?: return
+                val list = order ?: return
+                val idx = list.indexOfFirst { it.id == id }
+                val vis = listState.layoutInfo.visibleItemsInfo
+                val me = vis.firstOrNull { it.key == id } ?: return
+                if (me.index != idx) return // раскладка ещё не обновилась после прошлой перестановки
+                val center = me.offset + me.size / 2f + dragDy
+                val next = vis.firstOrNull { it.index == idx + 1 }
+                val prev = vis.firstOrNull { it.index == idx - 1 }
+                if (next != null && center > next.offset + next.size / 2f) {
+                    order = list.toMutableList().apply { add(idx + 1, removeAt(idx)) }
+                    dragDy -= next.size
+                } else if (prev != null && center < prev.offset + prev.size / 2f) {
+                    order = list.toMutableList().apply { add(idx - 1, removeAt(idx)) }
+                    dragDy += prev.size
+                }
+            }
+
+            // Автопрокрутка, когда строку подвели к верхнему или нижнему краю.
+            LaunchedEffect(dragId) {
+                while (dragId != null) {
+                    val id = dragId
+                    val info = listState.layoutInfo
+                    val me = info.visibleItemsInfo.firstOrNull { it.key == id }
+                    if (me != null && canDrag) {
+                        val center = me.offset + me.size / 2f + dragDy
+                        val zone = 140f
+                        val top = info.viewportStartOffset + zone
+                        val bottom = info.viewportEndOffset - zone
+                        val speed = when {
+                            center < top -> -((top - center) / zone).coerceIn(0f, 1f) * 28f
+                            center > bottom -> ((center - bottom) / zone).coerceIn(0f, 1f) * 28f
+                            else -> 0f
+                        }
+                        if (speed != 0f) {
+                            dragDy += listState.dispatchRawDelta(speed)
+                            checkSwap()
+                        }
+                    }
+                    kotlinx.coroutines.delay(16)
+                }
+            }
+
+            fun finishDrag(note: NoteEntity) {
+                val o = order
+                val moved = dragMoved
+                dragId = null
+                dragDy = 0f
+                dragMoved = false
+                when {
+                    !moved -> { order = null; actionTarget = note } // отпустили без движения: меню действий
+                    !canDrag -> { order = null; if (query.isBlank()) askManual = true }
+                    o != null && o.map { it.id } != itemsNow.map { it.id } -> vm.reorder(o.map { it.id })
+                    else -> order = null
+                }
+            }
+
             LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                itemsIndexed(items, key = { _, n -> n.id }) { index, note ->
+                itemsIndexed(shown, key = { _, n -> n.id }) { index, note ->
+                    val dragging = dragId == note.id
+                    val rowMod = (if (dragging) {
+                        Modifier
+                            .zIndex(1f)
+                            .graphicsLayer {
+                                translationY = dragDy
+                                scaleX = 1.03f
+                                scaleY = 1.03f
+                                shadowElevation = 24f
+                                shape = RoundedCornerShape(12.dp)
+                            }
+                    } else Modifier.animateItem())
+                        .pointerInput(note.id, canDrag) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    vm.select(note)
+                                    dragId = note.id
+                                    dragDy = 0f
+                                    dragAcc = 0f
+                                    dragMoved = false
+                                    order = itemsNow
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragAcc += kotlin.math.abs(amount.x) + kotlin.math.abs(amount.y)
+                                    if (dragAcc > 16f) dragMoved = true
+                                    if (canDrag && dragMoved) {
+                                        dragDy += amount.y
+                                        checkSwap()
+                                    }
+                                },
+                                onDragEnd = { finishDrag(note) },
+                                onDragCancel = { dragId = null; dragDy = 0f; dragMoved = false; order = null },
+                            )
+                        }
                     NoteRow(
                         note = note,
+                        modifier = rowMod,
+                        lifted = dragging,
                         zebra = index % 2 == 1,
                         number = numbers[note.id],
                         selected = vm.selectedId == note.id,
                         onClick = { if (note.isFolder) vm.openFolder(note) else vm.select(note) },
                         onDoubleClick = { vm.editNote(note) },
-                        onLongClick = {
-                            vm.select(note)
-                            actionTarget = note
-                        },
+                        onLongClick = {}, // долгий тап обрабатывает жест перетаскивания выше
                     )
                 }
             }
+            if (askManual) AlertDialog(
+                onDismissRequest = { askManual = false },
+                title = { Text("Ручной порядок") },
+                text = { Text("В этой папке включена автоматическая сортировка. Перейти на ручной порядок? Записи останутся в том порядке, в котором показаны сейчас, и их можно будет двигать.") },
+                confirmButton = { TextButton(onClick = { askManual = false; vm.makeManualKeepOrder() }) { Text("Перейти") } },
+                dismissButton = { TextButton(onClick = { askManual = false }) { Text("Не надо") } },
+            )
         }
     }
 
@@ -427,6 +561,8 @@ fun TreeScreen(vm: AppViewModel) {
             onDelete = { vm.delete(note) },
             onFlatten = { toRoot -> vm.flattenFolder(note, toRoot) },
             onClip = { move -> vm.startClip(note, move) },
+            canReorder = query.isBlank() && vm.sortMode.value == 0,
+            onEdge = { top -> vm.moveToEdge(note, top) },
         )
     }
     deleteTarget?.let { note ->
@@ -454,6 +590,8 @@ fun TreeScreen(vm: AppViewModel) {
 @Composable
 private fun NoteRow(
     note: NoteEntity,
+    modifier: Modifier = Modifier,
+    lifted: Boolean = false,
     number: List<Pair<String, Double>>?,
     zebra: Boolean,
     selected: Boolean,
@@ -464,10 +602,11 @@ private fun NoteRow(
     val status = reminderStatus(note)
     val textColor = note.textColorArgb?.let { Color(it) }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                if (lifted) MaterialTheme.colorScheme.surfaceContainerHighest
+                else if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else rowBackground(note)
                     ?: if (zebra) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) else Color.Transparent,
             )
@@ -560,74 +699,69 @@ private fun ActionDialog(
     onDelete: () -> Unit,
     onFlatten: (toRoot: Boolean) -> Unit,
     onClip: (move: Boolean) -> Unit,
+    canReorder: Boolean,
+    onEdge: (top: Boolean) -> Unit,
 ) {
     var title by remember { mutableStateOf(note.title) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    if (confirmDelete) {
+    var mode by remember { mutableStateOf(0) } // 0 — список действий, 1 — переименование, 2 — подтверждение удаления
+    val name = note.displayTitle().ifBlank { "Без названия" }
+    if (mode == 2) {
         AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("Удалить?") },
             text = {
                 Text(
-                    if (note.isFolder) "Папка «${note.title}» будет удалена вместе со всем содержимым."
-                    else "Заметка «${note.title}» будет удалена.",
+                    if (note.isFolder) "Папка «$name» будет удалена вместе со всем содержимым."
+                    else "Заметка «$name» будет удалена.",
                 )
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDelete()
-                    onDismiss()
-                }) { Text("Удалить") }
-            },
+            confirmButton = { TextButton(onClick = { onDelete(); onDismiss() }) { Text("Удалить") } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
         )
         return
     }
+    if (mode == 1) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Переименовать") },
+            text = { OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Название") }, singleLine = true) },
+            confirmButton = { TextButton(onClick = { onRename(title); onDismiss() }) { Text("Готово") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        )
+        return
+    }
+    @Composable
+    fun Item(icon: ImageVector, text: String, danger: Boolean = false, onClick: () -> Unit) {
+        val color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+            Text(text, color = color, modifier = Modifier.padding(start = 16.dp))
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Действия") },
+        title = { Text(name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Название") },
-                    singleLine = true,
-                )
-                TextButton(onClick = {
-                    onClip(true)
-                    onDismiss()
-                }) { Text("Переместить…") }
-                TextButton(onClick = {
-                    onClip(false)
-                    onDismiss()
-                }) { Text(if (note.isFolder) "Копировать папку со всем содержимым…" else "Копировать…") }
-                if (note.isFolder) {
-                    TextButton(onClick = {
-                        onFlatten(false)
-                        onDismiss()
-                    }) { Text("Вынести содержимое наверх") }
-                    if (note.parentId != null) {
-                        TextButton(onClick = {
-                            onFlatten(true)
-                            onDismiss()
-                        }) { Text("Вынести содержимое в корень") }
-                    }
+                Item(Icons.Filled.Edit, "Переименовать") { mode = 1 }
+                Item(Icons.Filled.DriveFileMove, "Переместить в другую папку…") { onClip(true); onDismiss() }
+                Item(Icons.Filled.ContentCopy, if (note.isFolder) "Копировать со всем содержимым…" else "Копировать…") { onClip(false); onDismiss() }
+                if (canReorder) {
+                    Item(Icons.Filled.VerticalAlignTop, "В начало списка") { onEdge(true); onDismiss() }
+                    Item(Icons.Filled.VerticalAlignBottom, "В конец списка") { onEdge(false); onDismiss() }
                 }
+                if (note.isFolder) {
+                    Item(Icons.Filled.Unarchive, "Вынести содержимое наверх") { onFlatten(false); onDismiss() }
+                    if (note.parentId != null) Item(Icons.Filled.Unarchive, "Вынести содержимое в корень") { onFlatten(true); onDismiss() }
+                }
+                Item(Icons.Filled.Delete, "Удалить", danger = true) { mode = 2 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = {
-                onRename(title)
-                onDismiss()
-            }) { Text("Переименовать") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { confirmDelete = true }) { Text("Удалить") }
-                TextButton(onClick = onDismiss) { Text("Отмена") }
-            }
-        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
 }
 

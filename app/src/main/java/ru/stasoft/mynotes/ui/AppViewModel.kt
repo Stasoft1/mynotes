@@ -429,6 +429,26 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         message = "Вход по отпечатку выключен"
     }
 
+    /** Сохраняет ручной порядок записей текущей папки: ids — в новом порядке сверху вниз. */
+    fun reorder(ids: List<Long>) {
+        val db = dbFlow.value ?: return
+        viewModelScope.launch {
+            db.withTransaction { ids.forEachIndexed { i, id -> db.notes().setSort(id, i) } }
+        }
+    }
+
+    /** Переносит запись в начало или в конец списка (ручной порядок). */
+    fun moveToEdge(note: NoteEntity, top: Boolean) {
+        val ids = items.value.map { it.id }.filter { it != note.id }
+        reorder(if (top) listOf(note.id) + ids else ids + note.id)
+    }
+
+    /** Включает ручной порядок, сохранив тот порядок, в котором записи показаны сейчас. */
+    fun makeManualKeepOrder() {
+        reorder(items.value.map { it.id })
+        setSortMode(0)
+    }
+
     /** Режим сортировки текущей папки (см. NoteEntity.sortMode); для корня сохраняется в настройках. */
     fun setSortMode(mode: Int, folders: Boolean = foldersFirst.value) {
         val dao = dao() ?: return

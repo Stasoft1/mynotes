@@ -39,6 +39,9 @@ interface NoteDao {
     @Query("SELECT COALESCE(MAX(updatedAt), 0) || ':' || COUNT(*) || ':' || COALESCE(SUM(LENGTH(varsJson)), 0) FROM notes")
     fun changeStamp(): Flow<String>
 
+    @Query("UPDATE notes SET sortIndex = :index WHERE id = :id")
+    suspend fun setSort(id: Long, index: Int)
+
     @Query("SELECT COALESCE(MAX(sortIndex), -1) FROM notes WHERE parentId IS :parentId")
     suspend fun maxSort(parentId: Long?): Int
 
