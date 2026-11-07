@@ -382,6 +382,7 @@ fun TreeScreen(vm: AppViewModel) {
             var dragMoved by remember { mutableStateOf(false) }
             var order by remember { mutableStateOf<List<NoteEntity>?>(null) }
             var askManual by remember { mutableStateOf(false) }
+            var suppressUntil by remember { mutableStateOf(0L) }
             val shown = order ?: items
             LaunchedEffect(folderId) { order = null; dragId = null; dragDy = 0f }
             LaunchedEffect(items) {
@@ -434,6 +435,7 @@ fun TreeScreen(vm: AppViewModel) {
             }
 
             fun finishDrag(note: NoteEntity) {
+                suppressUntil = android.os.SystemClock.uptimeMillis() + 450
                 val o = order
                 val moved = dragMoved
                 dragId = null
@@ -461,9 +463,11 @@ fun TreeScreen(vm: AppViewModel) {
                                 shape = RoundedCornerShape(12.dp)
                             }
                     } else Modifier.animateItem())
+                    val dragMod = Modifier
                         .pointerInput(note.id, canDrag) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
+                                    suppressUntil = Long.MAX_VALUE
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     vm.select(note)
                                     dragId = note.id
@@ -482,19 +486,20 @@ fun TreeScreen(vm: AppViewModel) {
                                     }
                                 },
                                 onDragEnd = { finishDrag(note) },
-                                onDragCancel = { dragId = null; dragDy = 0f; dragMoved = false; order = null },
+                                onDragCancel = { if (dragId != null) finishDrag(note) },
                             )
                         }
                     NoteRow(
                         note = note,
                         modifier = rowMod,
+                        dragModifier = dragMod,
                         lifted = dragging,
                         zebra = index % 2 == 1,
                         number = numbers[note.id],
                         selected = vm.selectedId == note.id,
-                        onClick = { if (note.isFolder) vm.openFolder(note) else vm.select(note) },
-                        onDoubleClick = { vm.editNote(note) },
-                        onLongClick = {}, // долгий тап обрабатывает жест перетаскивания выше
+                        onClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) { if (note.isFolder) vm.openFolder(note) else vm.select(note) } },
+                        onDoubleClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) vm.editNote(note) },
+                        onLongClick = null, // долгий тап обрабатывает жест перетаскивания
                     )
                 }
             }
@@ -591,13 +596,14 @@ fun TreeScreen(vm: AppViewModel) {
 private fun NoteRow(
     note: NoteEntity,
     modifier: Modifier = Modifier,
+    dragModifier: Modifier = Modifier,
     lifted: Boolean = false,
     number: List<Pair<String, Double>>?,
     zebra: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     val status = reminderStatus(note)
     val textColor = note.textColorArgb?.let { Color(it) }
@@ -611,6 +617,7 @@ private fun NoteRow(
                     ?: if (zebra) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) else Color.Transparent,
             )
             .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick, onLongClick = onLongClick)
+            .then(dragModifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
