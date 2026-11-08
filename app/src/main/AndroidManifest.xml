@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Намеренно нет разрешения INTERNET: приложение не может выходить в сеть. -->
+    <!-- Интернет нужен только для необязательного ИИ-разбора голосовых заметок (GigaChat): по умолчанию приложение в сеть не ходит.
+         Без ключа GigaChat в настройках запросов в сеть нет. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -44,4 +46,9 @@
         </receiver>
     </application>
 
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 </manifest>

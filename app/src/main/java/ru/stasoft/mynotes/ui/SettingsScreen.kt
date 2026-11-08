@@ -119,6 +119,8 @@ fun SettingsDialog(
                     SettingsAction(Icons.Filled.FileUpload, "Импорт из .mtnt", "Загрузить базу MyTreeNotes в корень", onImport)
                     SettingsAction(Icons.Filled.FactCheck, "Проверка показаний…", "Найти ошибки в пробеге и других показаниях", onCheck)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    VoiceSettingsSection(vm)
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("О программе")
                     Text(
                         "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "",

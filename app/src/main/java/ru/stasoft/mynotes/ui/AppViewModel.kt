@@ -45,6 +45,11 @@ import ru.stasoft.mynotes.data.VarDef
 import ru.stasoft.mynotes.data.computeNumbers
 import ru.stasoft.mynotes.data.parseVars
 import ru.stasoft.mynotes.data.sortNotes
+import ru.stasoft.mynotes.data.matchVoiceTemplate
+import ru.stasoft.mynotes.data.templateFieldKeys
+import ru.stasoft.mynotes.data.fillTemplateFromSpeech
+import ru.stasoft.mynotes.data.fillTemplateFromMap
+import ru.stasoft.mynotes.data.plainVoiceNote
 import ru.stasoft.mynotes.importer.MtntImporter
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -682,6 +687,146 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 loadChain(it)
             }
         }
+    }
+
+    // ---------- голосовой ввод ----------
+
+    class VoiceDraft(
+        val spoken: String, val title: String, val body: String,
+        val folderId: Long?, val folderName: String, val viaAi: Boolean,
+    )
+
+    var voiceDraft by mutableStateOf<VoiceDraft?>(null)
+    var voiceBusy by mutableStateOf(false)
+    var gigaKey by mutableStateOf(uiPrefs().getString("gc_key", "") ?: "")
+        private set
+    var gigaTrustOffer by mutableStateOf<ru.stasoft.mynotes.data.CertOffer?>(null)
+
+    fun updateGigaKey(k: String) {
+        gigaKey = k.trim()
+        uiPrefs().edit().putString("gc_key", gigaKey).apply()
+    }
+
+    private fun voiceTarget(): Triple<Long?, String, Long?> {
+        val t = today.value
+        return if (t != null) Triple(t.folder.id, t.folder.title, t.folder.id)
+        else Triple(folderId.value, path.lastOrNull()?.title?.ifBlank { null } ?: "Корень", null)
+    }
+
+    /** Разбор по правилам; null — шаблон не найден или поля не заполнились (нужен ИИ или обычная заметка). */
+    private suspend fun voiceByRules(spoken: String, parent: Long?, folderName: String): VoiceDraft? {
+        val m = matchVoiceTemplate(spoken, allSnippets.value) ?: return null
+        val (text, _) = expandTemplate(m.template.text, m.template.spansJson, parent)
+        val title = expandSnippet(m.template.title).ifBlank { m.template.label }
+        val keys = templateFieldKeys(text)
+        val (body, filled) = fillTemplateFromSpeech(text, m.rest)
+        if (keys.isNotEmpty() && filled == 0) return null
+        val full = if (keys.isEmpty() && m.rest.isNotBlank()) body.trimEnd() + "\n" + m.rest else body
+        return VoiceDraft(spoken, title, full, parent, folderName, false)
+    }
+
+    private suspend fun voiceByAi(spoken: String, parent: Long?, folderName: String): VoiceDraft {
+        val snippets = allSnippets.value
+        val list = snippets.joinToString("\n") { sn ->
+            val keys = templateFieldKeys(sn.text)
+            "- ${sn.label}" + if (keys.isNotEmpty()) ": поля " + keys.joinToString(", ") else ""
+        }
+        val system = "Ты помощник приложения для заметок. Пользователь продиктовал заметку голосом. " +
+            "Определи, подходит ли один из шаблонов, и извлеки значения полей. " +
+            "Отвечай ТОЛЬКО одним JSON-объектом без пояснений и без markdown: " +
+            "{\"template\":\"название шаблона или null\",\"title\":\"заголовок заметки\",\"fields\":{\"Поле\":\"значение\"},\"text\":\"остальной текст заметки или пустая строка\"}. " +
+            "Числа пиши цифрами с десятичной запятой и без единиц измерения; рубли и копейки объединяй в одно число (75 рублей 65 копеек = 75,65). " +
+            "Заполняй поля только тем, что прямо сказано, ничего не выдумывай и не вычисляй. " +
+            "Если шаблон не подходит, template = null, а title и text составь из речи.\n" +
+            "Шаблоны:\n" + list
+        val ans = ru.stasoft.mynotes.data.GigaChat.chat(app, gigaKey, system, spoken)
+        val json = org.json.JSONObject(ans.substring(ans.indexOf('{'), ans.lastIndexOf('}') + 1))
+        val tname = json.optString("template", "").trim().takeIf { it.isNotEmpty() && !it.equals("null", true) }
+        val tpl = tname?.let { n -> snippets.firstOrNull { it.label.equals(n, true) } }
+        val extra = json.optString("text", "").trim().takeIf { !it.equals("null", true) }.orEmpty()
+        if (tpl != null) {
+            val (text, _) = expandTemplate(tpl.text, tpl.spansJson, parent)
+            val fields = json.optJSONObject("fields")
+            val map = HashMap<String, String>()
+            fields?.keys()?.forEach { k -> map[k] = fields.optString(k, "") }
+            val (body, _) = fillTemplateFromMap(text, map)
+            val title = expandSnippet(tpl.title).ifBlank { tpl.label }
+            val full = if (extra.isNotBlank() && templateFieldKeys(text).none { it.contains("примеч", true) }) body.trimEnd() + "\n" + extra else body
+            return VoiceDraft(spoken, title, full, parent, folderName, true)
+        }
+        val title = json.optString("title", "").trim().ifBlank { plainVoiceNote(spoken).first }
+        return VoiceDraft(spoken, title, extra.ifBlank { plainVoiceNote(spoken).second }, parent, folderName, true)
+    }
+
+    /** Продиктованная фраза → черновик заметки в папке сегодняшнего дня (или в текущей, если такой папки нет). */
+    fun voiceInput(spoken: String, forceAi: Boolean = false) {
+        viewModelScope.launch {
+            voiceBusy = true
+            try {
+                val (parent, name, _) = voiceTarget()
+                val folderName = name
+                var draft = if (forceAi) null else voiceByRules(spoken, parent, folderName)
+                if (draft == null && gigaKey.isNotBlank()) {
+                    try {
+                        draft = voiceByAi(spoken, parent, folderName)
+                    } catch (e: javax.net.ssl.SSLException) {
+                        message = "Нужно разрешить доверие сертификату Минцифры: Настройки → Голосовой ввод"
+                    } catch (e: Exception) {
+                        message = "ИИ не ответил: ${e.message?.take(120)}"
+                    }
+                }
+                if (draft == null) {
+                    val (t, b) = plainVoiceNote(spoken)
+                    draft = VoiceDraft(spoken, t, b, parent, folderName, false)
+                }
+                voiceDraft = draft
+            } finally {
+                voiceBusy = false
+            }
+        }
+    }
+
+    fun voiceCommit(d: VoiceDraft, title: String, body: String) {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val id = dao.insert(
+                NoteEntity(
+                    parentId = d.folderId, title = title.trim(), body = body,
+                    sortIndex = dao.maxSort(d.folderId) + 1, createdAt = now, updatedAt = now,
+                ),
+            )
+            selectedId = id
+            voiceDraft = null
+            message = "Заметка создана в «${d.folderName}»"
+        }
+    }
+
+    /** Проверка подключения к GigaChat; при ошибке сертификата предлагает доверять корневому сертификату Минцифры. */
+    fun gigaCheck() {
+        viewModelScope.launch {
+            voiceBusy = true
+            try {
+                val a = ru.stasoft.mynotes.data.GigaChat.chat(app, gigaKey, "Отвечай одним словом.", "Скажи: работает")
+                message = "GigaChat подключён: ${a.take(40)}"
+            } catch (e: javax.net.ssl.SSLException) {
+                try {
+                    gigaTrustOffer = ru.stasoft.mynotes.data.GigaChat.fetchChain()
+                } catch (e2: Exception) {
+                    message = "Не удалось связаться с сервером Сбера: ${e2.message?.take(100)}"
+                }
+            } catch (e: Exception) {
+                message = "Ошибка: ${e.message?.take(150)}"
+            } finally {
+                voiceBusy = false
+            }
+        }
+    }
+
+    fun gigaTrust(offer: ru.stasoft.mynotes.data.CertOffer) {
+        ru.stasoft.mynotes.data.GigaChat.saveTrusted(app, offer.der)
+        gigaTrustOffer = null
+        gigaCheck()
     }
 
     /** Кнопка «+»: новая пустая заметка в текущей папке, сразу открывается редактор. */

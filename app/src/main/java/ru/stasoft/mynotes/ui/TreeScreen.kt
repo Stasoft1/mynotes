@@ -1,6 +1,7 @@
 package ru.stasoft.mynotes.ui
 
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
@@ -193,6 +194,24 @@ fun TreeScreen(vm: AppViewModel) {
         if (uri != null) vm.importMtnt(uri)
     }
 
+    val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val t = r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (r.resultCode == android.app.Activity.RESULT_OK && !t.isNullOrBlank()) vm.voiceInput(t)
+    }
+    fun startSpeech() {
+        try {
+            speech.launch(
+                android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Диктуйте заметку"),
+            )
+        } catch (e: Exception) {
+            vm.message = "На телефоне не найдена служба распознавания речи"
+        }
+    }
+    VoiceDialog(vm, onRetry = { startSpeech() })
+
     LaunchedEffect(vm.message) {
         vm.message?.let {
             snackbar.showSnackbar(it)
@@ -207,6 +226,7 @@ fun TreeScreen(vm: AppViewModel) {
                 if (folderId != null) StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { vm.goUp() }
                 StripButton(Icons.Filled.Add, "Создать заметку") { vm.newNote() }
                 StripButton(Icons.Filled.CreateNewFolder, "Создать папку") { vm.newChild() }
+                StripButton(Icons.Filled.Mic, "Голосовая заметка") { startSpeech() }
                 StripButton(Icons.Filled.Edit, "Редактировать выбранное") { vm.editSelected() }
                 StripButton(if (searching) Icons.Filled.Close else Icons.Filled.Search, "Поиск") {
                     searching = !searching
