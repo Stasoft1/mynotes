@@ -36,6 +36,7 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
     val d = vm.voiceDraft ?: return
     var title by remember(d) { mutableStateOf(d.title) }
     var body by remember(d) { mutableStateOf(d.body) }
+    var asList by remember(d) { mutableStateOf(d.checklist) }
     AlertDialog(
         onDismissRequest = { vm.voiceDraft = null },
         title = { Text("Голосовая заметка") },
@@ -48,6 +49,17 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp),
                 )
+                d.iconKey?.let { key ->
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        MdiIcon(key, d.iconColor?.let { androidx.compose.ui.graphics.Color(it) } ?: MaterialTheme.colorScheme.primary, 24.dp)
+                        Text("  Иконка: $key", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (d.iconKey == null && d.iconColor != null) Text("Цвет иконки задан", style = MaterialTheme.typography.bodySmall)
+                d.remindAt?.let {
+                    val f = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
+                    Text("Напоминание: $f", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
                 if (d.viaAi) Text("Разобрано ИИ (GigaChat)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 OutlinedTextField(
                     value = title, onValueChange = { title = it }, label = { Text("Название") },
@@ -57,9 +69,16 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
                     value = body, onValueChange = { body = it }, label = { Text("Текст") },
                     minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                Row(
+                    Modifier.fillMaxWidth().clickable { asList = !asList },
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    AppCheckbox(checked = asList, onCheckedChange = { asList = it })
+                    Text("Список задач (каждая строка — пункт)", style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { vm.voiceCommit(d, title, body) }) { Text("Создать") } },
+        confirmButton = { TextButton(onClick = { vm.voiceCommit(d, title, body, asList) }) { Text("Создать") } },
         dismissButton = {
             Row {
                 TextButton(onClick = { vm.voiceDraft = null; onRetry() }) { Text("Заново") }

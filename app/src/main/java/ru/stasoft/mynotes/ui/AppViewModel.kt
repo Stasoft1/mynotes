@@ -50,6 +50,10 @@ import ru.stasoft.mynotes.data.templateFieldKeys
 import ru.stasoft.mynotes.data.fillTemplateFromSpeech
 import ru.stasoft.mynotes.data.fillTemplateFromMap
 import ru.stasoft.mynotes.data.plainVoiceNote
+import ru.stasoft.mynotes.data.stripVoiceLead
+import ru.stasoft.mynotes.data.splitListItems
+import ru.stasoft.mynotes.data.extractVoiceCommands
+import ru.stasoft.mynotes.data.resolveIconName
 import ru.stasoft.mynotes.importer.MtntImporter
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -691,9 +695,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- голосовой ввод ----------
 
-    class VoiceDraft(
+    data class VoiceDraft(
         val spoken: String, val title: String, val body: String,
         val folderId: Long?, val folderName: String, val viaAi: Boolean,
+        val checklist: Boolean = false, val iconKey: String? = null, val iconColor: Int? = null, val remindAt: Long? = null,
     )
 
     var voiceDraft by mutableStateOf<VoiceDraft?>(null)
@@ -758,17 +763,55 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         return VoiceDraft(spoken, title, extra.ifBlank { plainVoiceNote(spoken).second }, parent, folderName, true)
     }
 
+    /** Заметка-список: название — то, что сказано до «в виде списка», пункты — после. */
+    private fun voiceList(cmds: ru.stasoft.mynotes.data.VoiceCommands, spoken: String, parent: Long?, folderName: String): VoiceDraft {
+        val before = stripVoiceLead(cmds.listBefore.orEmpty())
+        val after = cmds.listAfter.orEmpty()
+        val title: String
+        val itemsText: String
+        if (after.isNotBlank()) {
+            title = before.ifBlank { "Список" }
+            itemsText = after
+        } else {
+            val c = before.indexOf(':')
+            if (c > 0) { title = before.substring(0, c); itemsText = before.substring(c + 1) } else { title = "Список"; itemsText = before }
+        }
+        val items = splitListItems(itemsText)
+        return VoiceDraft(spoken, title.trim().replaceFirstChar { it.uppercase() }, items.joinToString("\n"), parent, folderName, false, checklist = true)
+    }
+
+    /** Имя иконки: по словарю, а если слова незнакомые и есть ключ GigaChat — по подсказке модели. */
+    private suspend fun voiceIcon(words: List<String>): String? {
+        if (words.isEmpty()) return null
+        resolveIconName(words) { Mdi.has(app, it) }?.let { return it }
+        if (gigaKey.isBlank()) return null
+        return try {
+            val a = ru.stasoft.mynotes.data.GigaChat.chat(
+                app, gigaKey,
+                "Подбери имя иконки из набора Material Design Icons (mdi, pictogrammers.com/library/mdi) по смыслу слов. " +
+                    "Ответь только одним английским именем через дефис, например gas-station, без пояснений.",
+                words.joinToString(" "),
+            )
+            val n = a.trim().lowercase().removePrefix("mdi-").removePrefix("mdi:").trim('"', '\'', '.', ' ', '`')
+            n.takeIf { Mdi.has(app, it) }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Продиктованная фраза → черновик заметки в папке сегодняшнего дня (или в текущей, если такой папки нет). */
     fun voiceInput(spoken: String, forceAi: Boolean = false) {
         viewModelScope.launch {
             voiceBusy = true
             try {
-                val (parent, name, _) = voiceTarget()
-                val folderName = name
-                var draft = if (forceAi) null else voiceByRules(spoken, parent, folderName)
+                val (parent, folderName, _) = voiceTarget()
+                val cmds = extractVoiceCommands(spoken)
+                val work = cmds.text
+                var draft = if (forceAi) null else voiceByRules(work, parent, folderName)
+                if (draft == null && cmds.isList) draft = voiceList(cmds, spoken, parent, folderName)
                 if (draft == null && gigaKey.isNotBlank()) {
                     try {
-                        draft = voiceByAi(spoken, parent, folderName)
+                        draft = voiceByAi(work, parent, folderName)
                     } catch (e: javax.net.ssl.SSLException) {
                         message = "Нужно разрешить доверие сертификату Минцифры: Настройки → Голосовой ввод"
                     } catch (e: Exception) {
@@ -776,17 +819,18 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (draft == null) {
-                    val (t, b) = plainVoiceNote(spoken)
+                    val (t, b) = plainVoiceNote(work)
                     draft = VoiceDraft(spoken, t, b, parent, folderName, false)
                 }
-                voiceDraft = draft
+                val icon = cmds.iconWords?.let { voiceIcon(it) }
+                voiceDraft = draft.copy(spoken = spoken, iconKey = icon, iconColor = cmds.color, remindAt = cmds.remindAt)
             } finally {
                 voiceBusy = false
             }
         }
     }
 
-    fun voiceCommit(d: VoiceDraft, title: String, body: String) {
+    fun voiceCommit(d: VoiceDraft, title: String, body: String, asList: Boolean = d.checklist) {
         val dao = dao() ?: return
         val now = System.currentTimeMillis()
         viewModelScope.launch {
@@ -794,6 +838,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 NoteEntity(
                     parentId = d.folderId, title = title.trim(), body = body,
                     sortIndex = dao.maxSort(d.folderId) + 1, createdAt = now, updatedAt = now,
+                    checklist = asList, iconKey = d.iconKey, iconColorArgb = d.iconColor, reminderAt = d.remindAt,
                 ),
             )
             selectedId = id
