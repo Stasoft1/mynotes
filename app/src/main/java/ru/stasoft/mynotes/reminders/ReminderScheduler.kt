@@ -52,7 +52,18 @@ object ReminderScheduler {
                     e.copy(lastFired = now, snoozeUntil = if (e.snoozeUntil in 1..now) 0 else e.snoozeUntil)
                 }
             }
-            data.copy(entries = updated)
+            // Свой интервал («каждые 3 часа») переходит на следующее срабатывание сам, без нажатия «Готово».
+            val autoDone = ArrayList<PendingDone>()
+            val rolled = updated.map { e ->
+                if (ReminderLogic.isCustom(e.period) && toNotify.any { it.id == e.id } && e.dueAt <= now) {
+                    val next = ReminderLogic.advance(e.dueAt, e.period, now)
+                    if (next != null) {
+                        autoDone.add(PendingDone(e.id, now))
+                        e.copy(dueAt = next, lastFired = 0, snoozeUntil = 0)
+                    } else e
+                } else e
+            }
+            data.copy(entries = rolled, pending = data.pending.filter { p -> autoDone.none { it.id == p.id } } + autoDone)
         }
         toNotify.forEach { ReminderNotifier.show(ctx, it, now) }
         rescheduleAll(ctx)

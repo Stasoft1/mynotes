@@ -27,6 +27,10 @@ object ReminderSync {
             val entries = notes.mapNotNull { n ->
                 val due = n.reminderAt ?: return@mapNotNull null
                 val prev = old[n.id]
+                // Повтор со своим интервалом уже мог уйти вперёд в индексе, пока база была закрыта.
+                if (prev != null && ReminderLogic.isCustom(n.reminderPeriod) && prev.dueAt > due) {
+                    return@mapNotNull prev.copy(title = n.displayTitle(), period = n.reminderPeriod, leadDays = minOf(n.reminderCheckDays, 364))
+                }
                 val same = prev != null && prev.dueAt == due
                 IndexEntry(
                     id = n.id,

@@ -1,6 +1,7 @@
 package ru.stasoft.mynotes.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -122,8 +123,8 @@ fun ReminderRow(note: NoteEntity, onEdit: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (st.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
-                val period = PERIOD_LABELS.getOrNull(note.reminderPeriod)
-                if (period != null && note.reminderPeriod > 0) {
+                val period = ReminderLogic.periodLabel(note.reminderPeriod)
+                if (note.reminderPeriod > 0) {
                     Text(period, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -148,11 +149,12 @@ fun ReminderDialog(
             existing?.toLocalTime()?.takeIf { it != LocalTime.MIDNIGHT } ?: LocalTime.of(9, 0),
         )
     }
-    var period by remember { mutableStateOf(note.reminderPeriod.coerceIn(0, 5)) }
+    var period by remember { mutableStateOf(note.reminderPeriod) }
     var lead by remember { mutableStateOf(if (note.reminderCheckDays > 0) note.reminderCheckDays.toString() else "") }
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
     var periodMenu by remember { mutableStateOf(false) }
+    var customDlg by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -164,7 +166,7 @@ fun ReminderDialog(
                     TextButton(onClick = { showTime = true }) { Text("Время: ${"%02d:%02d".format(time.hour, time.minute)}") }
                 }
                 Box {
-                    TextButton(onClick = { periodMenu = true }) { Text("Повтор: ${PERIOD_LABELS[period]}") }
+                    TextButton(onClick = { periodMenu = true }) { Text("Повтор: ${ReminderLogic.periodLabel(period)}") }
                     DropdownMenu(expanded = periodMenu, onDismissRequest = { periodMenu = false }) {
                         PERIOD_LABELS.forEachIndexed { i, label ->
                             DropdownMenuItem(text = { Text(label) }, onClick = {
@@ -172,6 +174,10 @@ fun ReminderDialog(
                                 periodMenu = false
                             })
                         }
+                        DropdownMenuItem(text = { Text("Свой интервал…") }, onClick = {
+                            periodMenu = false
+                            customDlg = true
+                        })
                     }
                 }
                 OutlinedTextField(
@@ -197,6 +203,38 @@ fun ReminderDialog(
             }
         },
     )
+
+    if (customDlg) {
+        val units = listOf("минут", "часов", "дней", "недель", "месяцев", "лет")
+        var n by remember { mutableStateOf(if (ReminderLogic.isCustom(period)) ReminderLogic.customCount(period).toString() else "") }
+        var unit by remember { mutableStateOf(if (ReminderLogic.isCustom(period)) ReminderLogic.customUnit(period) else 3) }
+        AlertDialog(
+            onDismissRequest = { customDlg = false },
+            title = { Text("Повторять каждые…") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = n, onValueChange = { v -> n = v.filter { it.isDigit() }.take(4) },
+                        label = { Text("Сколько") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    units.forEachIndexed { i, label ->
+                        Row(Modifier.fillMaxWidth().clickable { unit = i + 1 }, verticalAlignment = Alignment.CenterVertically) {
+                            AppRadio(selected = unit == i + 1, onClick = { unit = i + 1 })
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = (n.toIntOrNull() ?: 0) > 0,
+                    onClick = { period = ReminderLogic.custom(unit, n.toInt()); customDlg = false },
+                ) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { customDlg = false }) { Text("Отмена") } },
+        )
+    }
 
     if (showDate) {
         val state = rememberDatePickerState(

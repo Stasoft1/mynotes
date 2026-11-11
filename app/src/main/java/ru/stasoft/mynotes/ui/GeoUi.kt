@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -55,7 +57,6 @@ import org.json.JSONArray
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -68,22 +69,40 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-private class FoundPlace(val name: String, val lat: Double, val lon: Double)
+private class FoundPlace(val name: String, val lat: Double, val lon: Double, val km: Double)
 
-/** Поиск места по названию в OpenStreetMap (Nominatim); результаты ближе к видимой части карты стоят выше. */
-private suspend fun searchPlaces(q: String, view: BoundingBox?): List<FoundPlace> = withContext(Dispatchers.IO) {
-    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=ru&q=" + URLEncoder.encode(q, "UTF-8")
-    if (view != null) url += "&viewbox=${view.lonWest},${view.latNorth},${view.lonEast},${view.latSouth}"
+private fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dLat / 2).let { it * it } +
+        Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2).let { it * it }
+    return 2 * r * Math.asin(Math.sqrt(a))
+}
+
+private fun nominatim(q: String, box: String?, limit: Int): JSONArray {
+    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=$limit&accept-language=ru&q=" + URLEncoder.encode(q, "UTF-8")
+    if (box != null) url += "&viewbox=$box&bounded=1"
     val c = URL(url).openConnection() as HttpURLConnection
     c.setRequestProperty("User-Agent", "MyNotes/0.2 (Android notes app)")
     c.connectTimeout = 10000
     c.readTimeout = 15000
-    val text = c.inputStream.bufferedReader().readText()
-    val a = JSONArray(text)
+    return JSONArray(c.inputStream.bufferedReader().readText())
+}
+
+/** Поиск места в OpenStreetMap (Nominatim): сначала в радиусе примерно 25 км от центра карты, потом по всему миру; результаты от ближнего к дальнему. */
+private suspend fun searchPlaces(q: String, cLat: Double, cLon: Double): List<FoundPlace> = withContext(Dispatchers.IO) {
+    val dLat = 0.25
+    val dLon = 0.25 / Math.cos(Math.toRadians(cLat)).coerceAtLeast(0.2)
+    val box = "${cLon - dLon},${cLat + dLat},${cLon + dLon},${cLat - dLat}"
+    var a = nominatim(q, box, 30)
+    if (a.length() == 0) a = nominatim(q, null, 20)
     (0 until a.length()).map { i ->
         val o = a.getJSONObject(i)
-        FoundPlace(o.getString("display_name"), o.getString("lat").toDouble(), o.getString("lon").toDouble())
-    }
+        val la = o.getString("lat").toDouble()
+        val lo = o.getString("lon").toDouble()
+        FoundPlace(o.getString("display_name"), la, lo, distanceKm(cLat, cLon, la, lo))
+    }.sortedBy { it.km }.take(8)
 }
 
 /** Строка в заметке: где сработает напоминание. */
@@ -173,7 +192,8 @@ fun GeoDialog(
         status = "Ищу…"
         scope.launch {
             try {
-                results = searchPlaces(query.trim(), mapRef?.boundingBox)
+                val c = mapRef?.mapCenter
+                results = searchPlaces(query.trim(), c?.latitude ?: lat ?: 59.9343, c?.longitude ?: lon ?: 30.3351)
                 status = if (results.isEmpty()) "Ничего не найдено" else ""
             } catch (e: Exception) {
                 status = "Поиск не сработал: ${e.message?.take(80)}"
@@ -202,10 +222,10 @@ fun GeoDialog(
                     IconButton(onClick = { myLocation() }) { Icon(Icons.Filled.MyLocation, "Где я") }
                 }
                 if (results.isNotEmpty()) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
                         results.forEach { r ->
                             Text(
-                                r.name,
+                                (if (r.km < 1) "${(r.km * 1000).toInt()} м · " else "%.1f км · ".format(r.km)) + r.name,
                                 maxLines = 2,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.fillMaxWidth().clickable {
@@ -221,7 +241,7 @@ fun GeoDialog(
                     }
                 }
                 if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { c ->
@@ -271,7 +291,7 @@ fun GeoDialog(
                     )
                     DisposableEffect(Unit) { onDispose { mapRef?.onDetach() } }
                 }
-                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
                     if (lat == null) Text("Нажмите на карту, чтобы отметить место", style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(
                         value = label, onValueChange = { label = it }, singleLine = true,
