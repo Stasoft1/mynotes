@@ -68,4 +68,33 @@ object ReminderNotifier {
             // Нет разрешения на уведомления.
         }
     }
+
+    /** Уведомление «вы пришли на место». */
+    fun showGeo(ctx: Context, e: GeoEntry) {
+        ensureChannel(ctx)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val publicVersion = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle("Напоминание по месту")
+            .build()
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle(e.title.ifBlank { "Напоминание" })
+            .setContentText(if (e.label.isNotBlank()) "Вы рядом: ${e.label}" else "Вы пришли на место")
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            nm.notify(1_000_000 + e.id.toInt(), n)
+        } catch (_: SecurityException) {
+        }
+    }
 }

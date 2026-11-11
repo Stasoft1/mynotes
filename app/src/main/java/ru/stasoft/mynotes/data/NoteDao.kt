@@ -26,6 +26,10 @@ interface NoteDao {
     )
     fun withReminders(): Flow<List<NoteEntity>>
 
+    /** Заметки с напоминанием по месту. */
+    @Query("SELECT * FROM notes WHERE geoLat IS NOT NULL AND geoLon IS NOT NULL")
+    fun withGeo(): Flow<List<NoteEntity>>
+
     @Query("SELECT id, parentId, isFolder, title, varsJson, substr(body, 1, 2000) AS head FROM notes")
     suspend fun numRows(): List<NumRow>
 

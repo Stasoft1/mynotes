@@ -8,13 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [NoteEntity::class, SnippetEntity::class], version = 9, exportSchema = true)
+@Database(entities = [NoteEntity::class, SnippetEntity::class], version = 10, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
     companion object {
         /** Версия схемы (для проверки копий). */
-        const val VERSION = 9
+        const val VERSION = 10
 
         /** Последняя открытая база: нужна резервным копиям, чтобы сбросить журнал перед копированием. */
         @Volatile
@@ -88,12 +88,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoLat REAL")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoLon REAL")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoRadius INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoLabel TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoOnce INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         /** Открывает зашифрованную базу. [key] — мастер-ключ из Vault; вызывающий затирает его сам. */
         fun open(context: Context, key: ByteArray): AppDatabase {
             val factory = SupportOpenHelperFactory(key.copyOf())
             return Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
                 .also { current = it }
         }

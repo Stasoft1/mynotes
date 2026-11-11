@@ -45,5 +45,6 @@ class ReminderActionReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         ReminderScheduler.rescheduleAll(context)
+        GeoSync.register(context)
     }
 }

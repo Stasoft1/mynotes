@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.foundation.layout.Box
@@ -153,6 +154,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     val titleHistory = remember(note.id) { TextHistory(titleField) }
     val bodyHistory = remember(note.id) { TextHistory(bodyField) }
     var showReminderDialog by remember { mutableStateOf(false) }
+    var showGeoDialog by remember { mutableStateOf(false) }
     var showTemplates by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -406,6 +408,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     }
                 }
                 if (note.id >= 0) StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
+                if (note.id >= 0) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
                 if (note.id >= 0) StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.openProps(note)
                 }
@@ -433,6 +436,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             )
             if (note.reminderAt != null) {
                 ReminderRow(note = note, onEdit = { showReminderDialog = true })
+            }
+            if (note.geoLat != null) {
+                GeoRow(note = note, onEdit = { showGeoDialog = true })
             }
             undoReq?.let { u ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -546,6 +552,21 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             onPick = { c ->
                 showBgColor = false
                 setStyle(SpanKind.BACKGROUND, c?.toString())
+            },
+        )
+    }
+
+    if (showGeoDialog) {
+        GeoDialog(
+            note = note,
+            onDismiss = { showGeoDialog = false },
+            onSave = { la, lo, r, lb, once ->
+                showGeoDialog = false
+                vm.setGeo(note.id, la, lo, r, lb, once)
+            },
+            onClear = {
+                showGeoDialog = false
+                vm.setGeo(note.id, null, null, 0, "", true)
             },
         )
     }

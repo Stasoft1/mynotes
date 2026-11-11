@@ -25,7 +25,23 @@ data class IndexEntry(
 /** Отметка «выполнено», сделанная из уведомления, пока база была закрыта. */
 data class PendingDone(val id: Long, val doneAt: Long)
 
-data class IndexData(val entries: List<IndexEntry> = emptyList(), val pending: List<PendingDone> = emptyList())
+/** Место для напоминания: лежит в том же зашифрованном индексе, чтобы уведомление пришло и при закрытой базе. */
+data class GeoEntry(
+    val id: Long,
+    val title: String,
+    val lat: Double,
+    val lon: Double,
+    val radius: Int,
+    val label: String,
+    val once: Boolean,
+    val firedAt: Long = 0,
+)
+
+data class IndexData(
+    val entries: List<IndexEntry> = emptyList(),
+    val pending: List<PendingDone> = emptyList(),
+    val places: List<GeoEntry> = emptyList(),
+)
 
 /**
  * Небольшой индекс напоминаний (название и время), чтобы уведомления приходили, пока база закрыта паролем.
@@ -78,7 +94,17 @@ object ReminderStore {
                     PendingDone(o.getLong("id"), o.getLong("doneAt"))
                 }
             }
-            IndexData(entries, pending)
+            val places = json.optJSONArray("places")?.let { a ->
+                (0 until a.length()).map { i ->
+                    val o = a.getJSONObject(i)
+                    GeoEntry(
+                        id = o.getLong("id"), title = o.getString("title"),
+                        lat = o.getDouble("lat"), lon = o.getDouble("lon"), radius = o.getInt("radius"),
+                        label = o.optString("label", ""), once = o.optBoolean("once", true), firedAt = o.optLong("firedAt", 0),
+                    )
+                }
+            } ?: emptyList()
+            IndexData(entries, pending, places)
         } catch (e: Exception) {
             IndexData()
         }
@@ -99,6 +125,14 @@ object ReminderStore {
         })
         json.put("pending", JSONArray().also { a ->
             data.pending.forEach { p -> a.put(JSONObject().put("id", p.id).put("doneAt", p.doneAt)) }
+        })
+        json.put("places", JSONArray().also { a ->
+            data.places.forEach { p ->
+                a.put(
+                    JSONObject().put("id", p.id).put("title", p.title).put("lat", p.lat).put("lon", p.lon)
+                        .put("radius", p.radius).put("label", p.label).put("once", p.once).put("firedAt", p.firedAt),
+                )
+            }
         })
         // Keystore сам создаёт случайный IV; передавать свой нельзя.
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

@@ -82,4 +82,8 @@ dependencies {
 
     implementation("net.zetetic:sqlcipher-android:4.6.1@aar")
     implementation("androidx.sqlite:sqlite:2.4.0")
+
+    // Карта (OpenStreetMap, без ключей) и геозоны для напоминаний «когда буду в месте».
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

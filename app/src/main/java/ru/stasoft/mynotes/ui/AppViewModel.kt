@@ -28,6 +28,7 @@ import javax.crypto.Cipher
 import kotlinx.coroutines.Job
 import ru.stasoft.mynotes.reminders.ReminderLogic
 import ru.stasoft.mynotes.reminders.ReminderSync
+import ru.stasoft.mynotes.reminders.GeoSync
 import ru.stasoft.mynotes.crypto.BiometricVault
 import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
@@ -252,6 +253,15 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         reminderJob = viewModelScope.launch(Dispatchers.IO) {
             // Сбой в уведомлениях не должен ронять приложение.
             try {
+                launch {
+                    try {
+                        db.notes().withGeo().collect { GeoSync.rebuild(app, it) }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("MyNotes", "geo sync failed", e)
+                    }
+                }
                 ReminderSync.applyPending(app, db.notes())
                 db.notes().withReminders().collect {
                     try {
@@ -279,6 +289,23 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     reminderCheckDays = if (dueAt == null) 0 else leadDays,
                     reminderDoneAt = null,
                     updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            if (editing?.id == noteId) editing = dao.get(noteId)
+            if (props?.id == noteId) props = dao.get(noteId)
+        }
+    }
+
+    /** Напоминание по месту: точка на карте (lat == null — убрать). */
+    fun setGeo(noteId: Long, lat: Double?, lon: Double?, radius: Int, label: String, once: Boolean) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val cur = dao.get(noteId) ?: return@launch
+            dao.update(
+                cur.copy(
+                    geoLat = lat, geoLon = if (lat == null) null else lon,
+                    geoRadius = if (lat == null) 0 else radius, geoLabel = if (lat == null) "" else label,
+                    geoOnce = once, updatedAt = System.currentTimeMillis(),
                 ),
             )
             if (editing?.id == noteId) editing = dao.get(noteId)

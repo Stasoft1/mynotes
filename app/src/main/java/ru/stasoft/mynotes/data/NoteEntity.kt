@@ -66,4 +66,10 @@ data class NoteEntity(
     val numeric: Boolean = false,
     /** Откуда брать число: пусто — первая строка заметки, иначе название поля («Сумма»). */
     val numericField: String = "",
+    /** Напоминание по месту: координаты точки (пусто — не задано), радиус в метрах, подпись и «только один раз». */
+    val geoLat: Double? = null,
+    val geoLon: Double? = null,
+    val geoRadius: Int = 0,
+    val geoLabel: String = "",
+    val geoOnce: Boolean = true,
 )
