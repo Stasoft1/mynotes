@@ -568,6 +568,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 showGeoDialog = false
                 vm.setGeo(note.id, null, null, 0, "", true)
             },
+            places = vm.savedPlaces.collectAsState().value,
+            onSavePlace = { n, la, lo, r -> vm.savePlace(n, la, lo, r) },
+            onDeletePlace = { vm.deletePlace(it) },
         )
     }
 

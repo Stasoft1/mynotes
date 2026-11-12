@@ -34,6 +34,7 @@ import ru.stasoft.mynotes.crypto.Vault
 import ru.stasoft.mynotes.data.AppDatabase
 import ru.stasoft.mynotes.data.DEFAULT_SNIPPETS
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.PlaceEntity
 import ru.stasoft.mynotes.data.SnippetEntity
 import ru.stasoft.mynotes.data.FolderTitle
 import ru.stasoft.mynotes.data.ReadingIssue
@@ -171,6 +172,22 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     private var backgroundedAt = 0L
 
     // ---------- быстрые вставки ----------
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val savedPlaces: StateFlow<List<PlaceEntity>> =
+        dbFlow
+            .flatMapLatest { db -> db?.notes()?.places() ?: flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun savePlace(name: String, lat: Double, lon: Double, radius: Int) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.insertPlace(PlaceEntity(name = name.trim().ifBlank { "Место" }, lat = lat, lon = lon, radius = radius)) }
+    }
+
+    fun deletePlace(id: Long) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.deletePlace(id) }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val allSnippets: StateFlow<List<SnippetEntity>> =

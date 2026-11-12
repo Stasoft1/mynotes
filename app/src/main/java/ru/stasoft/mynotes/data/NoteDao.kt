@@ -26,6 +26,15 @@ interface NoteDao {
     )
     fun withReminders(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM places ORDER BY name COLLATE NOCASE")
+    fun places(): Flow<List<PlaceEntity>>
+
+    @Insert
+    suspend fun insertPlace(p: PlaceEntity): Long
+
+    @Query("DELETE FROM places WHERE id = :id")
+    suspend fun deletePlace(id: Long)
+
     /** Заметки с напоминанием по месту. */
     @Query("SELECT * FROM notes WHERE geoLat IS NOT NULL AND geoLon IS NOT NULL")
     fun withGeo(): Flow<List<NoteEntity>>

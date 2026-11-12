@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.rememberScrollState
@@ -64,6 +68,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.PlaceEntity
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -132,6 +137,9 @@ fun GeoDialog(
     onDismiss: () -> Unit,
     onSave: (lat: Double, lon: Double, radius: Int, label: String, once: Boolean) -> Unit,
     onClear: () -> Unit,
+    places: List<PlaceEntity>,
+    onSavePlace: (name: String, lat: Double, lon: Double, radius: Int) -> Unit,
+    onDeletePlace: (Long) -> Unit,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -145,6 +153,8 @@ fun GeoDialog(
     var status by remember { mutableStateOf("") }
     var mapRef by remember { mutableStateOf<MapView?>(null) }
     var permTick by remember { mutableIntStateOf(0) }
+    var savePlaceDlg by remember { mutableStateOf(false) }
+    var newPlaceName by remember { mutableStateOf("") }
 
     remember {
         Configuration.getInstance().apply {
@@ -207,6 +217,7 @@ fun GeoDialog(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Закрыть") }
                     Text("Напомнить по месту", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    if (note.geoLat != null) TextButton(onClick = onClear) { Text("Снять") }
                     TextButton(
                         enabled = lat != null,
                         onClick = { onSave(lat!!, lon!!, radius, label.trim(), once) },
@@ -215,7 +226,7 @@ fun GeoDialog(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = query, onValueChange = { query = it }, singleLine = true,
-                        placeholder = { Text("Найти место: магазин, адрес…") },
+                        placeholder = { Text("Найти место:", maxLines = 1) },
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = { doSearch() }) { Icon(Icons.Filled.Search, "Найти") }
@@ -231,7 +242,7 @@ fun GeoDialog(
                                 modifier = Modifier.fillMaxWidth().clickable {
                                     lat = r.lat
                                     lon = r.lon
-                                    if (label.isBlank()) label = r.name.substringBefore(',')
+                                    label = r.name.substringBefore(',')
                                     results = emptyList()
                                     goTo(GeoPoint(r.lat, r.lon))
                                 }.padding(vertical = 8.dp, horizontal = 4.dp),
@@ -256,6 +267,7 @@ fun GeoDialog(
                                         override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
                                             lat = p.latitude
                                             lon = p.longitude
+                                            label = ""
                                             results = emptyList()
                                             return true
                                         }
@@ -291,36 +303,93 @@ fun GeoDialog(
                     )
                     DisposableEffect(Unit) { onDispose { mapRef?.onDetach() } }
                 }
-                Column(Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    if (lat == null) Text("Нажмите на карту, чтобы отметить место", style = MaterialTheme.typography.bodyMedium)
-                    OutlinedTextField(
-                        value = label, onValueChange = { label = it }, singleLine = true,
-                        label = { Text("Название места") }, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text("Радиус: $radius м", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-                    Slider(
-                        value = radius.toFloat(), onValueChange = { radius = (it / 50f).toInt() * 50 },
-                        valueRange = 100f..1000f,
-                    )
-                    Row(Modifier.fillMaxWidth().clickable { once = !once }, verticalAlignment = Alignment.CenterVertically) {
-                        AppCheckbox(checked = once, onCheckedChange = { once = it })
-                        Text("Сработать один раз", style = MaterialTheme.typography.bodyMedium)
+                val saved = places.firstOrNull { p -> lat != null && lon != null && Math.abs(p.lat - lat!!) < 1e-6 && Math.abs(p.lon - lon!!) < 1e-6 }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    // Сохранённые места: нажать — выбрать; ниже можно добавить текущую точку или удалить выбранное место.
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (places.isEmpty()) Text("Сохранённых мест пока нет", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+                        places.forEach { p ->
+                            FilterChip(
+                                selected = saved?.id == p.id,
+                                onClick = {
+                                    lat = p.lat
+                                    lon = p.lon
+                                    radius = p.radius
+                                    label = p.name
+                                    results = emptyList()
+                                    goTo(GeoPoint(p.lat, p.lon))
+                                },
+                                label = { Text(p.name, maxLines = 1) },
+                            )
+                        }
                     }
-                    if (!fine) {
-                        Text("Для напоминаний по месту нужен доступ к геопозиции.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        TextButton(onClick = { fineLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Разрешить геопозицию") }
-                    } else if (!bg) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Чтобы уведомление приходило, когда приложение закрыто, выберите для приложения доступ к геопозиции «Всегда».",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                            when {
+                                lat == null -> "Нажмите на карту или выберите место"
+                                else -> "📍 " + label.ifBlank { "Выбранное место" }
+                            },
+                            style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+                            modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = { bgLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }) { Text("Разрешить «Всегда»") }
-                    } else {
-                        Text("Геопозиция разрешена.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (lat != null && saved == null) TextButton(onClick = { newPlaceName = label; savePlaceDlg = true }) { Text("Сохранить место") }
+                        if (saved != null) TextButton(onClick = { onDeletePlace(saved.id) }) { Text("Удалить место", color = MaterialTheme.colorScheme.error) }
                     }
-                    if (note.geoLat != null) TextButton(onClick = onClear) { Text("Убрать напоминание по месту") }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Радиус $radius м", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(110.dp))
+                        Slider(
+                            value = radius.toFloat(), onValueChange = { radius = (it / 50f).toInt() * 50 },
+                            valueRange = 100f..1000f, modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.clickable { once = !once }, verticalAlignment = Alignment.CenterVertically) {
+                            AppCheckbox(checked = once, onCheckedChange = { once = it })
+                            Text("Один раз", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text(
+                            when {
+                                !fine -> "Нет доступа к геопозиции"
+                                !bg -> "Нужен доступ «Всегда»"
+                                else -> "Геопозиция разрешена"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (fine && bg) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f).padding(start = 12.dp),
+                        )
+                        if (!fine) TextButton(onClick = { fineLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Разрешить") }
+                        else if (!bg) TextButton(onClick = { bgLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }) { Text("Разрешить") }
+                    }
                 }
             }
         }
+    }
+    if (savePlaceDlg) {
+        AlertDialog(
+            onDismissRequest = { savePlaceDlg = false },
+            title = { Text("Сохранить место") },
+            text = {
+                OutlinedTextField(
+                    value = newPlaceName, onValueChange = { newPlaceName = it }, singleLine = true,
+                    label = { Text("Название (например, Пятёрочка у дома)") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val la = lat
+                    val lo = lon
+                    if (la != null && lo != null) {
+                        label = newPlaceName.trim().ifBlank { "Место" }
+                        onSavePlace(label, la, lo, radius)
+                    }
+                    savePlaceDlg = false
+                }) { Text("Сохранить") }
+            },
+            dismissButton = { TextButton(onClick = { savePlaceDlg = false }) { Text("Отмена") } },
+        )
     }
 }
