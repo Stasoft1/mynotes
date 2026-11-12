@@ -5,6 +5,10 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -223,13 +227,30 @@ fun GeoDialog(
                         onClick = { onSave(lat!!, lon!!, radius, label.trim(), once) },
                     ) { Text("Сохранить") }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = query, onValueChange = { query = it }, singleLine = true,
-                        placeholder = { Text("Найти место:", maxLines = 1) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { doSearch() }) { Icon(Icons.Filled.Search, "Найти") }
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.weight(1f).height(44.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(start = 16.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = query, onValueChange = { query = it }, singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { doSearch() }),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (query.isEmpty()) Text("Найти место:", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    inner()
+                                }
+                            },
+                        )
+                        IconButton(onClick = { doSearch() }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Search, "Найти") }
+                    }
                     IconButton(onClick = { myLocation() }) { Icon(Icons.Filled.MyLocation, "Где я") }
                 }
                 if (results.isNotEmpty()) {
@@ -304,7 +325,7 @@ fun GeoDialog(
                     DisposableEffect(Unit) { onDispose { mapRef?.onDetach() } }
                 }
                 val saved = places.firstOrNull { p -> lat != null && lon != null && Math.abs(p.lat - lat!!) < 1e-6 && Math.abs(p.lon - lon!!) < 1e-6 }
-                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp)) {
                     // Сохранённые места: нажать — выбрать; ниже можно добавить текущую точку или удалить выбранное место.
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
