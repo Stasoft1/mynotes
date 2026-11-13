@@ -212,6 +212,14 @@ fun TreeScreen(vm: AppViewModel) {
     }
     VoiceDialog(vm, onRetry = { startSpeech() })
 
+    // Новый день: при возвращении в приложение создаём папку сегодняшнего дня, если включено.
+    val dayOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(dayOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.ensureToday() }
+        dayOwner.lifecycle.addObserver(obs)
+        onDispose { dayOwner.lifecycle.removeObserver(obs) }
+    }
+
     LaunchedEffect(vm.message) {
         vm.message?.let {
             snackbar.showSnackbar(it)

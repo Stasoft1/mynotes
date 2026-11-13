@@ -737,6 +737,74 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- автосоздание папки дня ----------
+
+    var autoDay by mutableStateOf(uiPrefs().getBoolean("auto_day", false))
+        private set
+    var autoDaySnips by mutableStateOf(uiPrefs().getStringSet("auto_day_snips", emptySet()) ?: emptySet())
+        private set
+    private var autoDayTried: java.time.LocalDate? = null
+
+    fun updateAutoDay(on: Boolean) {
+        autoDay = on
+        uiPrefs().edit().putBoolean("auto_day", on).apply()
+        if (on) ensureToday()
+    }
+
+    fun toggleAutoDaySnippet(label: String) {
+        autoDaySnips = if (label in autoDaySnips) autoDaySnips - label else autoDaySnips + label
+        uiPrefs().edit().putStringSet("auto_day_snips", autoDaySnips).apply()
+    }
+
+    private fun formatLike(sample: String, d: java.time.LocalDate): String {
+        val m = Regex("(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}|\\d{2})").find(sample)
+            ?: return "%02d.%02d.%02d".format(d.dayOfMonth, d.monthValue, d.year % 100)
+        fun p(v: Int, w: Int) = if (w >= 2) "%02d".format(v) else v.toString()
+        val y = if (m.groupValues[3].length == 4) d.year.toString() else "%02d".format(d.year % 100)
+        return p(d.dayOfMonth, m.groupValues[1].length) + "." + p(d.monthValue, m.groupValues[2].length) + "." + y
+    }
+
+    /**
+     * Если папки сегодняшнего дня ещё нет, создаёт её рядом с последней папкой дня (в том же формате даты)
+     * и кладёт в неё заметки из выбранных шаблонов. [manual] — нажато вручную: сообщает и о неудаче.
+     */
+    fun ensureToday(manual: Boolean = false) {
+        if (!manual && !autoDay) return
+        val dao = dao() ?: return
+        val today = java.time.LocalDate.now()
+        if (!manual && autoDayTried == today) return
+        viewModelScope.launch {
+            val folders = dao.folderTitles().first()
+            if (folders.any { dateInTitle(it.title) == today }) {
+                autoDayTried = today
+                if (manual) message = "Папка сегодняшнего дня уже есть"
+                return@launch
+            }
+            val last = folders.filter { dateInTitle(it.title) != null }.maxByOrNull { dateInTitle(it.title)!! }
+            if (last == null) {
+                if (manual) message = "Сначала создайте одну папку дня вручную, например «${formatLike("", today)}»: по ней я пойму, где и в каком формате создавать"
+                return@launch
+            }
+            autoDayTried = today
+            val now = System.currentTimeMillis()
+            val title = formatLike(last.title, today)
+            val fid = dao.insert(
+                NoteEntity(parentId = last.parentId, isFolder = true, title = title, sortIndex = dao.maxSort(last.parentId) + 1, createdAt = now, updatedAt = now),
+            )
+            val snippets = allSnippets.value.filter { it.label in autoDaySnips }
+            snippets.forEachIndexed { i, s ->
+                val (text, spans) = expandTemplate(s.text, s.spansJson, fid)
+                dao.insert(
+                    NoteEntity(
+                        parentId = fid, title = expandSnippet(s.title), body = text, spansJson = spans,
+                        sortIndex = i, createdAt = now, updatedAt = now,
+                    ),
+                )
+            }
+            message = "Создана папка дня «$title»" + if (snippets.isEmpty()) "" else " и ${snippets.size} зам."
+        }
+    }
+
     // ---------- голосовой ввод ----------
 
     data class VoiceDraft(
