@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.foundation.layout.Box
@@ -155,6 +156,8 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     val bodyHistory = remember(note.id) { TextHistory(bodyField) }
     var showReminderDialog by remember { mutableStateOf(false) }
     var showGeoDialog by remember { mutableStateOf(false) }
+    val routeCtx = androidx.compose.ui.platform.LocalContext.current
+    val routeAddr = findAddress(titleField.text, bodyField.text)
     var showTemplates by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -409,6 +412,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 }
                 if (note.id >= 0) StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
                 if (note.id >= 0) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
+                if (routeAddr != null) StripButton(Icons.Filled.Directions, "Маршрут") { openRoute(routeCtx, routeAddr) }
                 if (note.id >= 0) StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.openProps(note)
                 }

@@ -121,6 +121,8 @@ fun SettingsDialog(
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     VoiceSettingsSection(vm)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    RouteSettingsSection()
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("О программе")
                     Text(
                         "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "",
