@@ -6,6 +6,7 @@ import android.provider.DocumentsContract
 import org.json.JSONArray
 import org.json.JSONObject
 import ru.stasoft.mynotes.data.AppDatabase
+import ru.stasoft.mynotes.data.PhotoStore
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -81,6 +82,12 @@ object BackupManager {
         for (f in listOf(dbFile, File(dbFile.path + "-wal"))) {
             if (!f.exists() || f.length() == 0L) continue
             zip.putNextEntry(ZipEntry(f.name))
+            f.inputStream().use { it.copyTo(zip) }
+            zip.closeEntry()
+        }
+        // Фото: уже зашифрованные файлы (ключ выводится из мастер-ключа, так что копия переносима).
+        PhotoStore.dir(ctx).listFiles()?.forEach { f ->
+            zip.putNextEntry(ZipEntry("photos/" + f.name))
             f.inputStream().use { it.copyTo(zip) }
             zip.closeEntry()
         }
@@ -188,6 +195,11 @@ object BackupManager {
                 while (true) {
                     val e = zin.nextEntry ?: break
                     val target = File(tmpDir, e.name.substringAfterLast('/'))
+                    if (e.name.startsWith("photos/") && !e.isDirectory) {
+                        File(tmpDir, "photos").mkdirs()
+                        FileOutputStream(File(tmpDir, "photos/" + e.name.substringAfterLast('/'))).use { zin.copyTo(it) }
+                        continue
+                    }
                     when (e.name) {
                         "meta.json" -> meta = JSONObject(zin.readBytes().decodeToString())
                         "vault.json" -> vault = JSONArray(zin.readBytes().decodeToString())
@@ -207,6 +219,8 @@ object BackupManager {
             File(tmpDir, DB_NAME).copyTo(dbFile, overwrite = true)
             val wal = File(tmpDir, "$DB_NAME-wal")
             if (wal.exists()) wal.copyTo(File(dbFile.path + "-wal"), overwrite = true)
+            PhotoStore.dir(ctx).listFiles()?.forEach { it.delete() }
+            File(tmpDir, "photos").listFiles()?.forEach { it.copyTo(File(PhotoStore.dir(ctx), it.name), overwrite = true) }
             val p = ctx.getSharedPreferences("vault", Context.MODE_PRIVATE)
             val ed = p.edit().clear()
             val arr = vault!!

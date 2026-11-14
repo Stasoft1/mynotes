@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.stateIn
@@ -401,7 +402,15 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 d.notes().count() // открываем базу сразу, чтобы ошибка проявилась здесь
                 d
             }
+            ru.stasoft.mynotes.data.PhotoStore.setKey(key)
             dbFlow.value = db
+            withContext(Dispatchers.IO) {
+                try {
+                    db.notes().deleteOrphanPhotos()
+                    ru.stasoft.mynotes.data.PhotoStore.sweep(app, db.notes().photoFiles().toSet())
+                } catch (_: Exception) {
+                }
+            }
             needSetup = false
             unlocked = true
             error = null
@@ -540,6 +549,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         reminderJob = null
         resumeEditingId = props?.id ?: editing?.id ?: resumeEditingId
         dbFlow.value = null
+        ru.stasoft.mynotes.data.PhotoStore.setKey(null)
         unlocked = false
         // Папка, выбор и поиск остаются, а тексты записей из памяти убираем: после входа они загрузятся заново.
         editing = null
@@ -810,6 +820,42 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 editing = it
                 loadChain(it)
             }
+        }
+    }
+
+    // ---------- фото ----------
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val photoCounts: StateFlow<Map<Long, Int>> =
+        dbFlow.flatMapLatest { db -> if (db == null) flowOf(emptyMap()) else db.notes().photoCounts().map { l -> l.associate { it.noteId to it.n } } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun photosOf(noteId: Long): Flow<List<ru.stasoft.mynotes.data.PhotoEntity>> =
+        dbFlow.flatMapLatest { db -> if (db == null) flowOf(emptyList()) else db.notes().photosFor(noteId) }
+
+    fun addPhotos(noteId: Long, uris: List<Uri>) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            var ok = 0
+            for (u in uris) {
+                try {
+                    val name = withContext(Dispatchers.IO) { ru.stasoft.mynotes.data.PhotoStore.save(app, u) }
+                    dao.insertPhoto(ru.stasoft.mynotes.data.PhotoEntity(noteId = noteId, file = name, createdAt = System.currentTimeMillis()))
+                    ok++
+                } catch (e: Exception) {
+                    message = "Не удалось добавить фото: ${e.message}"
+                }
+            }
+            if (ok > 0) message = if (ok == 1) "Фото добавлено" else "Добавлено фото: $ok"
+        }
+    }
+
+    fun removePhoto(p: ru.stasoft.mynotes.data.PhotoEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            dao.deletePhoto(p.id)
+            withContext(Dispatchers.IO) { ru.stasoft.mynotes.data.PhotoStore.delete(app, p.file) }
         }
     }
 

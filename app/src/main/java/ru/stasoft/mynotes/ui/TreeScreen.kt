@@ -190,6 +190,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showFuel by remember { mutableStateOf(false) }
+    val photoCounts by vm.photoCounts.collectAsState()
     var showBackup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
@@ -558,6 +559,7 @@ fun TreeScreen(vm: AppViewModel) {
                         lifted = dragging,
                         zebra = index % 2 == 1,
                         number = numbers[note.id],
+                        photos = photoCounts[note.id] ?: 0,
                         selected = vm.selectedId == note.id,
                         onClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) { if (note.isFolder) vm.openFolder(note) else vm.select(note) } },
                         onDoubleClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) vm.editNote(note) },
@@ -663,6 +665,7 @@ private fun NoteRow(
     dragModifier: Modifier = Modifier,
     lifted: Boolean = false,
     number: List<Pair<String, Double>>?,
+    photos: Int = 0,
     zebra: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
@@ -734,6 +737,7 @@ private fun NoteRow(
             }
         }
         if (!note.isFolder && note.body.isNotEmpty()) LinkButtons(note.displayTitle(), note.body)
+        if (photos > 0) Text("📷$photos", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
         NoteIcon(
             effectiveIcon(note),
             note.iconColorArgb?.let { Color(it) } ?: legacyIconColor(note) ?: textColor ?: MaterialTheme.colorScheme.primary,

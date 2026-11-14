@@ -65,6 +65,25 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE parentId IS :parentId ORDER BY sortIndex ASC, id ASC")
     suspend fun childrenOnce(parentId: Long?): List<NoteEntity>
 
+    @Query("SELECT * FROM photos WHERE noteId = :noteId ORDER BY id")
+    fun photosFor(noteId: Long): Flow<List<PhotoEntity>>
+
+    @Query("SELECT noteId, COUNT(*) AS n FROM photos GROUP BY noteId")
+    fun photoCounts(): Flow<List<PhotoCount>>
+
+    @Insert
+    suspend fun insertPhoto(p: PhotoEntity): Long
+
+    @Query("DELETE FROM photos WHERE id = :id")
+    suspend fun deletePhoto(id: Long)
+
+    @Query("SELECT file FROM photos")
+    suspend fun photoFiles(): List<String>
+
+    /** Фото удалённых записей (в том числе вместе с папкой). */
+    @Query("DELETE FROM photos WHERE noteId NOT IN (SELECT id FROM notes)")
+    suspend fun deleteOrphanPhotos()
+
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun get(id: Long): NoteEntity?
 

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tune
@@ -157,6 +158,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var showReminderDialog by remember { mutableStateOf(false) }
     var showGeoDialog by remember { mutableStateOf(false) }
     val routeCtx = androidx.compose.ui.platform.LocalContext.current
+    val pickPhoto = rememberPhotoPicker(vm, note.id)
     val routeAddr = findAddress(titleField.text, bodyField.text)
     var showTemplates by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -412,6 +414,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 }
                 if (note.id >= 0) StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
                 if (note.id >= 0) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
+                if (note.id >= 0 && !note.readOnly) StripButton(Icons.Filled.PhotoCamera, "Фото") { pickPhoto() }
                 if (routeAddr != null) StripButton(Icons.Filled.Directions, "Маршрут") { openRoute(routeCtx, routeAddr) }
                 if (note.id >= 0) StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.openProps(note)
@@ -444,6 +447,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             if (note.geoLat != null) {
                 GeoRow(note = note, onEdit = { showGeoDialog = true })
             }
+            if (note.id >= 0) PhotoStrip(vm, note.id, note.readOnly)
             undoReq?.let { u ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("Заявка приведена к шаблону Ф1", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
