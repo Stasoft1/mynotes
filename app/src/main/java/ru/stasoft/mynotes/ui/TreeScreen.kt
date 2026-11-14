@@ -192,6 +192,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showFuel by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(serviceStatus) { vm.checkService() }
     val photoCounts by vm.photoCounts.collectAsState()
     var showBackup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
