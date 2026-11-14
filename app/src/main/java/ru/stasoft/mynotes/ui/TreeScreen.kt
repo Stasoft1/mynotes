@@ -28,7 +28,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.FilterChip
+import ru.stasoft.mynotes.data.searchSnippet
+import ru.stasoft.mynotes.data.searchWords
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -318,6 +322,21 @@ fun TreeScreen(vm: AppViewModel) {
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            if (searching) {
+                val sType by vm.searchType.collectAsState()
+                val sAge by vm.searchAge.collectAsState()
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf("Всё", "Заметки", "Папки").forEachIndexed { i, l ->
+                        FilterChip(selected = sType == i, onClick = { vm.searchType.value = i }, label = { Text(l) })
+                    }
+                    listOf("Любая дата", "Неделя", "Месяц", "Год").forEachIndexed { i, l ->
+                        FilterChip(selected = sAge == i, onClick = { vm.searchAge.value = i }, label = { Text(l) })
+                    }
+                }
+            }
             today?.let { t ->
                 if (folderId == null && query.isBlank()) TodayCard(t, onOpen = { vm.openFolderById(t.folder.id) })
             }
@@ -528,6 +547,7 @@ fun TreeScreen(vm: AppViewModel) {
                         onClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) { if (note.isFolder) vm.openFolder(note) else vm.select(note) } },
                         onDoubleClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) vm.editNote(note) },
                         onLongClick = null, // долгий тап обрабатывает жест перетаскивания
+                        hl = query,
                     )
                 }
             }
@@ -632,6 +652,7 @@ private fun NoteRow(
     onClick: () -> Unit,
     onDoubleClick: () -> Unit,
     onLongClick: (() -> Unit)?,
+    hl: String = "",
 ) {
     val status = reminderStatus(note)
     val textColor = note.textColorArgb?.let { Color(it) }
@@ -653,7 +674,7 @@ private fun NoteRow(
         Text(if (note.isFolder) "📁" else "📄", style = MaterialTheme.typography.titleLarge)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(
-                resolveTitle(note.displayTitle(), number).ifBlank { "Без названия" },
+                highlight(resolveTitle(note.displayTitle(), number).ifBlank { "Без названия" }, hl),
                 style = MaterialTheme.typography.titleMedium,
                 color = textColor ?: Color.Unspecified,
                 maxLines = 1,
@@ -667,7 +688,11 @@ private fun NoteRow(
                 )
             } else if (status == null && !note.isFolder && note.body.isNotBlank()) {
                 Text(
-                    note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
+                    highlight(
+                        (if (hl.isNotBlank()) searchSnippet(note.body, hl) else null)
+                            ?: note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
+                        hl,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -949,6 +974,25 @@ private fun TodayCard(t: AppViewModel.TodayInfo, onOpen: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+    }
+}
+
+/** Подсвечивает слова запроса жёлтым фоном. */
+@Composable
+private fun highlight(text: String, q: String): androidx.compose.ui.text.AnnotatedString {
+    if (q.isBlank()) return androidx.compose.ui.text.AnnotatedString(text)
+    val words = searchWords(q)
+    val low = text.lowercase()
+    val mark = androidx.compose.ui.text.SpanStyle(background = Color(0x99FFD54F), color = Color.Black)
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(text)
+        if (low.length == text.length) words.forEach { w ->
+            var i = low.indexOf(w)
+            while (i >= 0) {
+                addStyle(mark, i, i + w.length)
+                i = low.indexOf(w, i + w.length)
+            }
         }
     }
 }

@@ -113,19 +113,25 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val sortMode = MutableStateFlow(rootSort())
     val foldersFirst = MutableStateFlow(rootFoldersFirst())
 
+    /** Фильтры поиска: тип (0 всё, 1 заметки, 2 папки) и давность правки (0 всё, 1 неделя, 2 месяц, 3 год). */
+    val searchType = MutableStateFlow(0)
+    val searchAge = MutableStateFlow(0)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val items: StateFlow<List<NoteEntity>> =
-        combine(dbFlow, folderId, query, sortMode, foldersFirst) { db, fid, q, mode, ff -> listOf(db, fid, q, mode, ff) }
+        combine(dbFlow, folderId, query, sortMode, foldersFirst, searchType, searchAge) { a -> a.toList() }
             .flatMapLatest { args ->
                 val db = args[0] as AppDatabase?
                 val fid = args[1] as Long?
                 val q = args[2] as String
                 val mode = args[3] as Int
                 val ff = args[4] as Boolean
+                val type = args[5] as Int
+                val age = args[6] as Int
                 when {
                     db == null -> flowOf(emptyList())
                     q.isBlank() -> db.notes().children(fid).map { sortNotes(it, mode, ff) }
-                    else -> db.notes().search(q.trim())
+                    else -> db.notes().allNotes().map { all -> searchNotes(all, q, type, age) }
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

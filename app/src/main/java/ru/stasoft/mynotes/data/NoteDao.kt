@@ -19,6 +19,10 @@ interface NoteDao {
     )
     fun search(q: String): Flow<List<NoteEntity>>
 
+    /** Все записи для поиска без учёта регистра (SQLite LIKE не умеет в кириллицу). */
+    @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
+    fun allNotes(): Flow<List<NoteEntity>>
+
     /** Заметки с активными напоминаниями: повторяющиеся и ещё не выполненные разовые. */
     @Query(
         "SELECT * FROM notes WHERE reminderAt IS NOT NULL AND (reminderPeriod > 0 OR reminderDoneAt IS NULL) " +
