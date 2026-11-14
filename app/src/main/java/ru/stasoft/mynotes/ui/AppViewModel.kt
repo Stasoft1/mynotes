@@ -1052,9 +1052,32 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         if (!manual && autoDayTried == today) return
         viewModelScope.launch {
             val folders = dao.folderTitles().first()
-            if (folders.any { dateInTitle(it.title) == today }) {
+            val now = System.currentTimeMillis()
+            // Заметки из выбранных шаблонов читаем прямо из базы: общий поток шаблонов мог ещё не успеть загрузиться.
+            suspend fun fill(fid: Long): Int {
+                val snippets = dao.allSnippetsOnce().filter { it.label in autoDaySnips }
+                snippets.forEachIndexed { i, s ->
+                    val (text, spans) = expandTemplate(s.text, s.spansJson, fid)
+                    dao.insert(
+                        NoteEntity(
+                            parentId = fid, title = expandSnippet(s.title), body = text, spansJson = spans,
+                            sortIndex = i, createdAt = now, updatedAt = now,
+                        ),
+                    )
+                }
+                uiPrefs().edit().putString("auto_day_filled", today.toString()).apply()
+                return snippets.size
+            }
+            val existing = folders.firstOrNull { dateInTitle(it.title) == today }
+            if (existing != null) {
                 autoDayTried = today
-                if (manual) message = "Папка сегодняшнего дня уже есть"
+                // Папка дня уже есть, но пуста (например, создана до выбора шаблонов): наполняем один раз.
+                val empty = dao.childrenOnce(existing.id).isEmpty()
+                val already = uiPrefs().getString("auto_day_filled", "") == today.toString()
+                if (empty && (manual || !already)) {
+                    val n = fill(existing.id)
+                    message = if (n > 0) "В папку дня добавлено заметок: $n" else "Не выбраны шаблоны для нового дня"
+                } else if (manual) message = "Папка сегодняшнего дня уже есть"
                 return@launch
             }
             val last = folders.filter { dateInTitle(it.title) != null }.maxByOrNull { dateInTitle(it.title)!! }
@@ -1063,22 +1086,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             autoDayTried = today
-            val now = System.currentTimeMillis()
             val title = formatLike(last.title, today)
             val fid = dao.insert(
                 NoteEntity(parentId = last.parentId, isFolder = true, title = title, sortIndex = dao.maxSort(last.parentId) + 1, createdAt = now, updatedAt = now),
             )
-            val snippets = allSnippets.value.filter { it.label in autoDaySnips }
-            snippets.forEachIndexed { i, s ->
-                val (text, spans) = expandTemplate(s.text, s.spansJson, fid)
-                dao.insert(
-                    NoteEntity(
-                        parentId = fid, title = expandSnippet(s.title), body = text, spansJson = spans,
-                        sortIndex = i, createdAt = now, updatedAt = now,
-                    ),
-                )
-            }
-            message = "Создана папка дня «$title»" + if (snippets.isEmpty()) "" else " и ${snippets.size} зам."
+            val n = fill(fid)
+            message = "Создана папка дня «$title»" + if (n == 0) "" else " и заметок: $n"
         }
     }
 
