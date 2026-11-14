@@ -874,6 +874,56 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         dbFlow.flatMapLatest { db -> db?.notes()?.serviceItems() ?: flowOf(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /** Состояние ТО по всем машинам; пересчитывается при любой правке заметок. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val serviceStatus: StateFlow<List<ru.stasoft.mynotes.data.ServiceStatus>> =
+        dbFlow.flatMapLatest { db ->
+            if (db == null) flowOf(emptyList())
+            else combine(db.notes().changeStamp(), cars, serviceItems) { _, c, i -> c to i }.map { (c, i) ->
+                if (c.isEmpty() || i.isEmpty() || !Modules.on("auto")) emptyList()
+                else try {
+                    val rows = db.notes().titleRows()
+                    withContext(Dispatchers.Default) {
+                        val kids = rows.groupBy { it.parentId }
+                        val notes = ArrayList<ru.stasoft.mynotes.data.CarNote>()
+                        fun walk(parent: Long?, inherited: java.time.LocalDate?, depth: Int) {
+                            for (r in kids[parent].orEmpty()) {
+                                val date = (if (r.isFolder) dateInTitle(r.title) else null) ?: inherited
+                                if (r.isFolder) { if (depth < 12) walk(r.id, date, depth + 1) }
+                                else if (ru.stasoft.mynotes.data.isAutoNote(r.head)) notes.add(ru.stasoft.mynotes.data.CarNote(date, r.head))
+                            }
+                        }
+                        walk(null, null, 1)
+                        ru.stasoft.mynotes.data.computeService(c, i, notes, java.time.LocalDate.now())
+                    }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Раз в сутки при открытии приложения напоминает уведомлением о подходящем ТО. */
+    fun checkService() {
+        if (!Modules.on("auto")) return
+        val due = serviceStatus.value.filter { it.level in 1..2 }
+        if (due.isEmpty()) return
+        val today = java.time.LocalDate.now().toString()
+        if (uiPrefs().getString("service_notified", "") == today) return
+        uiPrefs().edit().putString("service_notified", today).apply()
+        val text = due.joinToString("\n") { (if (cars.value.size > 1) it.carName + ": " else "") + it.itemName + " — " + it.text() }
+        ru.stasoft.mynotes.reminders.ReminderNotifier.showService(app, text)
+    }
+
+    fun saveServiceItem(s: ru.stasoft.mynotes.data.ServiceItemEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch { if (s.id == 0L) dao.insertServiceItem(s) else dao.updateServiceItem(s) }
+    }
+
+    fun deleteServiceItem(s: ru.stasoft.mynotes.data.ServiceItemEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch { dao.deleteServiceItem(s.id) }
+    }
+
     fun defaultCar(): ru.stasoft.mynotes.data.CarEntity? = cars.value.firstOrNull { it.isDefault } ?: cars.value.firstOrNull()
 
     fun saveCar(c: ru.stasoft.mynotes.data.CarEntity) {

@@ -190,6 +190,8 @@ fun TreeScreen(vm: AppViewModel) {
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showFuel by remember { mutableStateOf(false) }
+    var showService by remember { mutableStateOf(false) }
+    val serviceStatus by vm.serviceStatus.collectAsState()
     val photoCounts by vm.photoCounts.collectAsState()
     var showBackup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -221,7 +223,7 @@ fun TreeScreen(vm: AppViewModel) {
     // Новый день: при возвращении в приложение создаём папку сегодняшнего дня, если включено.
     val dayOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(dayOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.ensureToday() }
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.ensureToday(); vm.checkService() } }
         dayOwner.lifecycle.addObserver(obs)
         onDispose { dayOwner.lifecycle.removeObserver(obs) }
     }
@@ -274,6 +276,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 vm.exportPdf(vm.selectedId)
+                            },
+                        )
+                        if (ru.stasoft.mynotes.modules.Modules.on("auto") && serviceStatus.isNotEmpty()) DropdownMenuItem(
+                            text = { Text("Состояние ТО…") },
+                            onClick = {
+                                menuOpen = false
+                                showService = true
                             },
                         )
                         if (ru.stasoft.mynotes.modules.Modules.on("auto")) DropdownMenuItem(
@@ -351,6 +360,19 @@ fun TreeScreen(vm: AppViewModel) {
                     listOf("Любая дата", "Неделя", "Месяц", "Год").forEachIndexed { i, l ->
                         FilterChip(selected = sAge == i, onClick = { vm.searchAge.value = i }, label = { Text(l) })
                     }
+                }
+            }
+            val dueService = serviceStatus.filter { it.level in 1..2 }
+            if (folderId == null && query.isBlank() && dueService.isNotEmpty()) Column(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.tertiaryContainer).clickable { showService = true }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text("Пора на ТО", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                dueService.take(3).forEach {
+                    Text(
+                        (if (dueService.map { d -> d.carName }.distinct().size > 1) it.carName + ": " else "") + it.itemName + " — " + it.text(),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onTertiaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             today?.let { t ->
@@ -581,6 +603,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSnippets) SnippetsDialog(vm, onDismiss = { showSnippets = false })
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
+    if (showService) ServiceDialog(vm, onDismiss = { showService = false })
     if (showFuel) FuelDialog(vm, folderId, onDismiss = { showFuel = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
     if (showBackup) BackupDialog(vm, onDismiss = { showBackup = false })

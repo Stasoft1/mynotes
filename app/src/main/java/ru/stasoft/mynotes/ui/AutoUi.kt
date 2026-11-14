@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import ru.stasoft.mynotes.data.CarEntity
+import ru.stasoft.mynotes.data.ServiceItemEntity
+import androidx.compose.foundation.verticalScroll
 import ru.stasoft.mynotes.data.dateInTitle
 
 /** Раздел настроек модуля «Авто»: справочник машин и привязка старых заметок. */
@@ -59,9 +61,13 @@ fun AutoSettingsSection(vm: AppViewModel) {
 
 @Composable
 private fun CarDialog(vm: AppViewModel, car: CarEntity, onDismiss: () -> Unit) {
+    val allItems by vm.serviceItems.collectAsState()
+    val items = allItems.filter { it.carId == car.id }
+    var itemEdit by remember { mutableStateOf<ServiceItemEntity?>(null) }
     var name by remember(car.id) { mutableStateOf(car.name) }
     var aliases by remember(car.id) { mutableStateOf(car.aliases) }
     var dflt by remember(car.id) { mutableStateOf(car.isDefault) }
+    itemEdit?.let { ServiceItemDialog(vm, it, onDismiss = { itemEdit = null }) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (car.id == 0L) "Новая машина" else "Машина") },
@@ -76,6 +82,28 @@ private fun CarDialog(vm: AppViewModel, car: CarEntity, onDismiss: () -> Unit) {
                     Text("Машина по умолчанию", Modifier.weight(1f))
                     AppSwitch(checked = dflt, onCheckedChange = { dflt = it })
                 }
+                if (car.id != 0L) {
+                    Text("Регламент ТО", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+                    Text(
+                        "Работа считается выполненной по заметкам этой машины, где в строке «Работа:» есть её название. Напомним по пробегу или по времени, что наступит раньше.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    items.forEach { i ->
+                        Text(
+                            i.name + ": " + listOfNotNull(i.everyKm.takeIf { it > 0 }?.let { "${it} км" }, i.everyMonths.takeIf { it > 0 }?.let { "$it мес." }).joinToString(" или "),
+                            Modifier.fillMaxWidth().clickable { itemEdit = i }.padding(vertical = 6.dp),
+                        )
+                    }
+                    Row {
+                        TextButton(onClick = { itemEdit = ServiceItemEntity(carId = car.id, name = "") }) { Text("Добавить работу…") }
+                        if (items.isEmpty()) TextButton(onClick = {
+                            listOf(
+                                Triple("Замена масла", 10000, 12), Triple("Воздушный фильтр", 15000, 12), Triple("Тормозные колодки", 30000, 0),
+                                Triple("Тормозная жидкость", 0, 24), Triple("Ремень ГРМ", 90000, 60),
+                            ).forEach { (n, km, mo) -> vm.saveServiceItem(ServiceItemEntity(carId = car.id, name = n, everyKm = km, everyMonths = mo)) }
+                        }) { Text("Типовой набор") }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -87,6 +115,74 @@ private fun CarDialog(vm: AppViewModel, car: CarEntity, onDismiss: () -> Unit) {
                 TextButton(onClick = onDismiss) { Text("Отмена") }
             }
         },
+    )
+}
+
+@Composable
+private fun ServiceItemDialog(vm: AppViewModel, item: ServiceItemEntity, onDismiss: () -> Unit) {
+    var name by remember(item.id) { mutableStateOf(item.name) }
+    var km by remember(item.id) { mutableStateOf(if (item.everyKm > 0) item.everyKm.toString() else "") }
+    var months by remember(item.id) { mutableStateOf(if (item.everyMonths > 0) item.everyMonths.toString() else "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (item.id == 0L) "Новая работа" else "Работа ТО") },
+        text = {
+            Column {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название (Замена масла)") }, singleLine = true)
+                OutlinedTextField(
+                    value = km, onValueChange = { km = it.filter(Char::isDigit) }, label = { Text("Каждые, км (пусто — не считать)") },
+                    singleLine = true, modifier = Modifier.padding(top = 8.dp),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = months, onValueChange = { months = it.filter(Char::isDigit) }, label = { Text("Каждые, месяцев (пусто — не считать)") },
+                    singleLine = true, modifier = Modifier.padding(top = 8.dp),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank() && (km.isNotEmpty() || months.isNotEmpty()), onClick = {
+                vm.saveServiceItem(item.copy(name = name.trim(), everyKm = km.toIntOrNull() ?: 0, everyMonths = months.toIntOrNull() ?: 0))
+                onDismiss()
+            }) { Text("Сохранить") }
+        },
+        dismissButton = {
+            Row {
+                if (item.id != 0L) TextButton(onClick = { vm.deleteServiceItem(item); onDismiss() }) { Text("Удалить") }
+                TextButton(onClick = onDismiss) { Text("Отмена") }
+            }
+        },
+    )
+}
+
+/** Состояние ТО по всем машинам. */
+@Composable
+fun ServiceDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    val st by vm.serviceStatus.collectAsState()
+    val cars by vm.cars.collectAsState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Состояние ТО") },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                if (st.isEmpty()) Text("Добавьте машину и её регламент ТО в Настройках → Авто.")
+                st.groupBy { it.carName }.forEach { (car, list) ->
+                    if (cars.size > 1) Text(car, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+                    list.sortedByDescending { if (it.level == 3) -1 else it.level }.forEach { s ->
+                        Column(Modifier.padding(vertical = 4.dp)) {
+                            Text(s.itemName, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                s.text(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = when (s.level) { 2 -> MaterialTheme.colorScheme.error; 1 -> MaterialTheme.colorScheme.primary; else -> MaterialTheme.colorScheme.onSurfaceVariant },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
 }
 

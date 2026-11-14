@@ -69,6 +69,30 @@ object ReminderNotifier {
         }
     }
 
+    /** Уведомление «подходит срок ТО». */
+    fun showService(ctx: Context, text: String) {
+        ensureChannel(ctx)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle("Пора на ТО")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            nm.notify(2_000_000, n)
+        } catch (_: SecurityException) {
+        }
+    }
+
     /** Уведомление «вы пришли на место». */
     fun showGeo(ctx: Context, e: GeoEntry) {
         ensureChannel(ctx)
