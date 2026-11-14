@@ -40,6 +40,7 @@ import ru.stasoft.mynotes.data.FolderTitle
 import ru.stasoft.mynotes.data.ReadingIssue
 import ru.stasoft.mynotes.data.expandWithVars
 import ru.stasoft.mynotes.data.expandSnippet
+import ru.stasoft.mynotes.data.searchNotes
 import ru.stasoft.mynotes.data.parseSpans
 import ru.stasoft.mynotes.data.spansToJson
 import ru.stasoft.mynotes.data.dateInTitle
