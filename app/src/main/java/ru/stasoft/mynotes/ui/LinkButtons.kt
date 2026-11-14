@@ -127,7 +127,7 @@ fun LinkButtons(title: String, body: String) {
     val hits = remember(body) { findLinks(body) }
     // 0 — окно закрыто, 1 — ссылки, 2 — телефоны.
     var open by remember { mutableIntStateOf(0) }
-    val addr = remember(title, body) { findAddress(title, body) }
+    val addr = remember(title, body) { findAddress(title, body) }.takeIf { ru.stasoft.mynotes.modules.Modules.on("route") }
     if (addr != null) RouteButton { openRoute(ctx, addr) }
     val hasLinks = hits.any { it.kind == 0 }
     val hasPhones = hits.any { it.kind == 1 }

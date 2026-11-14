@@ -119,11 +119,20 @@ fun SettingsDialog(
                     SettingsAction(Icons.Filled.FileUpload, "Импорт из .mtnt", "Загрузить базу MyTreeNotes в корень", onImport)
                     SettingsAction(Icons.Filled.FactCheck, "Проверка показаний…", "Найти ошибки в пробеге и других показаниях", onCheck)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    AutoDaySettingsSection(vm)
+                    ModulesSection(vm)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    VoiceSettingsSection(vm)
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    RouteSettingsSection()
+                    if (ru.stasoft.mynotes.modules.Modules.on("day")) {
+                        AutoDaySettingsSection(vm)
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    }
+                    if (ru.stasoft.mynotes.modules.Modules.on("giga")) {
+                        VoiceSettingsSection(vm)
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    }
+                    if (ru.stasoft.mynotes.modules.Modules.on("route")) {
+                        RouteSettingsSection()
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("О программе")
                     Text(

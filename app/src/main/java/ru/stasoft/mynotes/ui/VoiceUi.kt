@@ -82,7 +82,7 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
         dismissButton = {
             Row {
                 TextButton(onClick = { vm.voiceDraft = null; onRetry() }) { Text("Заново") }
-                if (vm.gigaKey.isNotBlank() && !d.viaAi) {
+                if (vm.gigaActive && !d.viaAi) {
                     TextButton(onClick = { vm.voiceDraft = null; vm.voiceInput(d.spoken, forceAi = true) }) { Text("ИИ") }
                 }
                 TextButton(onClick = { vm.voiceDraft = null }) { Text("Отмена") }
@@ -96,6 +96,7 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
 fun VoiceSettingsSection(vm: AppViewModel) {
     var editKey by remember { mutableStateOf(false) }
     var keyText by remember { mutableStateOf("") }
+    if (!ru.stasoft.mynotes.modules.Modules.on("giga")) return
     Text(
         "Голосовой ввод: ИИ-разбор (GigaChat)",
         style = MaterialTheme.typography.titleSmall,

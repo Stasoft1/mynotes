@@ -42,6 +42,7 @@ import ru.stasoft.mynotes.data.ReadingIssue
 import ru.stasoft.mynotes.data.expandWithVars
 import ru.stasoft.mynotes.data.expandSnippet
 import ru.stasoft.mynotes.data.searchNotes
+import ru.stasoft.mynotes.modules.Modules
 import ru.stasoft.mynotes.data.resolveTitle
 import ru.stasoft.mynotes.data.formatValues
 import ru.stasoft.mynotes.data.displayTitle
@@ -64,6 +65,8 @@ import ru.stasoft.mynotes.data.resolveIconName
 import ru.stasoft.mynotes.importer.MtntImporter
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
+    init { Modules.init(app) }
+
 
     var unlocked by mutableStateOf(false)
         private set
@@ -283,7 +286,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             try {
                 launch {
                     try {
-                        db.notes().withGeo().collect { GeoSync.rebuild(app, it) }
+                        db.notes().withGeo().collect { GeoSync.rebuild(app, if (Modules.on("geo")) it else emptyList()) }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -891,6 +894,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
      * и кладёт в неё заметки из выбранных шаблонов. [manual] — нажато вручную: сообщает и о неудаче.
      */
     fun ensureToday(manual: Boolean = false) {
+        if (!Modules.on("day")) return
         if (!manual && !autoDay) return
         val dao = dao() ?: return
         val today = java.time.LocalDate.now()
@@ -937,6 +941,15 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     var voiceDraft by mutableStateOf<VoiceDraft?>(null)
     var voiceBusy by mutableStateOf(false)
+    val gigaActive: Boolean get() = gigaKey.isNotBlank() && Modules.on("giga")
+
+    /** Включает или выключает модуль; для геозон сразу пересобираем регистрацию. */
+    fun setModule(id: String, on: Boolean) {
+        Modules.set(app, id, on)
+        if (id == "geo") dao()?.let { d -> viewModelScope.launch { GeoSync.rebuild(app, if (on) d.withGeo().first() else emptyList()) } }
+        if (id == "day" && on) ensureToday()
+    }
+
     var gigaKey by mutableStateOf(uiPrefs().getString("gc_key", "") ?: "")
         private set
     var gigaTrustOffer by mutableStateOf<ru.stasoft.mynotes.data.CertOffer?>(null)
@@ -1018,7 +1031,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     private suspend fun voiceIcon(words: List<String>): String? {
         if (words.isEmpty()) return null
         resolveIconName(words) { Mdi.has(app, it) }?.let { return it }
-        if (gigaKey.isBlank()) return null
+        if (!gigaActive) return null
         return try {
             val a = ru.stasoft.mynotes.data.GigaChat.chat(
                 app, gigaKey,
@@ -1043,7 +1056,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 val work = cmds.text
                 var draft = if (forceAi) null else voiceByRules(work, parent, folderName)
                 if (draft == null && cmds.isList) draft = voiceList(cmds, spoken, parent, folderName)
-                if (draft == null && gigaKey.isNotBlank()) {
+                if (draft == null && gigaActive) {
                     try {
                         draft = voiceByAi(work, parent, folderName)
                     } catch (e: javax.net.ssl.SSLException) {

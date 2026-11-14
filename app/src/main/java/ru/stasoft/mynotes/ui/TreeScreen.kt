@@ -276,7 +276,7 @@ fun TreeScreen(vm: AppViewModel) {
                                 vm.exportPdf(vm.selectedId)
                             },
                         )
-                        DropdownMenuItem(
+                        if (ru.stasoft.mynotes.modules.Modules.on("auto")) DropdownMenuItem(
                             text = { Text("Статистика заправок…") },
                             onClick = {
                                 menuOpen = false

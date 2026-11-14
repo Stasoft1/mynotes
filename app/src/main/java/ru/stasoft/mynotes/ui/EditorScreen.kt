@@ -1,5 +1,6 @@
 package ru.stasoft.mynotes.ui
 
+import ru.stasoft.mynotes.modules.Modules
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -159,7 +160,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var showGeoDialog by remember { mutableStateOf(false) }
     val routeCtx = androidx.compose.ui.platform.LocalContext.current
     val pickPhoto = rememberPhotoPicker(vm, note.id)
-    val routeAddr = findAddress(titleField.text, bodyField.text)
+    val routeAddr = if (Modules.on("route")) findAddress(titleField.text, bodyField.text) else null
     var showTemplates by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -263,7 +264,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         spans = mapSpansForEdit(spans, p, removed, inserted, typing)
         pending = emptyMap()
         bodyField = v
-        if (a.isEmpty() && b.length >= 40 && !titleFocused && !note.readOnly && !note.checklist && note.id >= 0 &&
+        if (Modules.on("f1") && a.isEmpty() && b.length >= 40 && !titleFocused && !note.readOnly && !note.checklist && note.id >= 0 &&
             ru.stasoft.mynotes.data.looksLikeRequest(b)) pasteAt++
     }
 
@@ -371,7 +372,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                         if (snippets.isEmpty()) {
                             DropdownMenuItem(text = { Text("Шаблонов нет") }, onClick = { showTemplates = false }, enabled = false)
                         }
-                        DropdownMenuItem(
+                        if (Modules.on("f1")) DropdownMenuItem(
                             text = { Text("Привести заявку к Ф1") },
                             enabled = !note.readOnly && !note.checklist,
                             onClick = {
@@ -413,7 +414,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     }
                 }
                 if (note.id >= 0) StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
-                if (note.id >= 0) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
+                if (note.id >= 0 && Modules.on("geo")) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
                 if (note.id >= 0 && !note.readOnly) StripButton(Icons.Filled.PhotoCamera, "Фото") { pickPhoto() }
                 if (routeAddr != null) StripButton(Icons.Filled.Directions, "Маршрут") { openRoute(routeCtx, routeAddr) }
                 if (note.id >= 0) StripButton(Icons.Filled.Tune, "Свойства") {
@@ -444,7 +445,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             if (note.reminderAt != null) {
                 ReminderRow(note = note, onEdit = { showReminderDialog = true })
             }
-            if (note.geoLat != null) {
+            if (note.geoLat != null && Modules.on("geo")) {
                 GeoRow(note = note, onEdit = { showGeoDialog = true })
             }
             if (note.id >= 0) PhotoStrip(vm, note.id, note.readOnly)
@@ -564,7 +565,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         )
     }
 
-    if (showGeoDialog) {
+    if (showGeoDialog && Modules.on("geo")) {
         GeoDialog(
             note = note,
             onDismiss = { showGeoDialog = false },
