@@ -1021,6 +1021,35 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     private var autoDayTried: java.time.LocalDate? = null
 
+    /** График папки дня: 0 — каждый день, 1 — по дням недели (маска: пн=1 … вс=64), 2 — «N через M» от опорного дня. */
+    var dayMode by mutableStateOf(uiPrefs().getInt("auto_day_mode", 0))
+        private set
+    var dayMask by mutableStateOf(uiPrefs().getInt("auto_day_mask", 31))
+        private set
+    var dayWork by mutableStateOf(uiPrefs().getInt("auto_day_work", 2))
+        private set
+    var dayOff by mutableStateOf(uiPrefs().getInt("auto_day_off", 2))
+        private set
+    var dayAnchor by mutableStateOf(uiPrefs().getLong("auto_day_anchor", java.time.LocalDate.now().toEpochDay()))
+        private set
+
+    fun saveDaySchedule(mode: Int = dayMode, mask: Int = dayMask, work: Int = dayWork, off: Int = dayOff, anchor: Long = dayAnchor) {
+        dayMode = mode; dayMask = mask; dayWork = work.coerceIn(1, 60); dayOff = off.coerceIn(1, 60); dayAnchor = anchor
+        uiPrefs().edit().putInt("auto_day_mode", dayMode).putInt("auto_day_mask", dayMask).putInt("auto_day_work", dayWork)
+            .putInt("auto_day_off", dayOff).putLong("auto_day_anchor", dayAnchor).apply()
+        autoDayTried = null
+    }
+
+    /** Нужна ли папка дня в эту дату по выбранному графику. */
+    fun isDayScheduled(d: java.time.LocalDate): Boolean = when (dayMode) {
+        1 -> (dayMask shr (d.dayOfWeek.value - 1)) and 1 == 1
+        2 -> {
+            val period = dayWork + dayOff
+            Math.floorMod(d.toEpochDay() - dayAnchor, period.toLong()) < dayWork
+        }
+        else -> true
+    }
+
     fun updateAutoDay(on: Boolean) {
         autoDay = on
         uiPrefs().edit().putBoolean("auto_day", on).apply()
@@ -1050,6 +1079,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = dao() ?: return
         val today = java.time.LocalDate.now()
         if (!manual && autoDayTried == today) return
+        if (!manual && !isDayScheduled(today)) return
         viewModelScope.launch {
             val folders = dao.folderTitles().first()
             val now = System.currentTimeMillis()

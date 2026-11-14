@@ -1,7 +1,15 @@
 package ru.stasoft.mynotes.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +44,41 @@ fun AutoDaySettingsSection(vm: AppViewModel) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Text("В какие дни создавать:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("Каждый день", "По дням недели", "График «через»").forEachIndexed { i, l ->
+            FilterChip(selected = vm.dayMode == i, onClick = { vm.saveDaySchedule(mode = i) }, label = { Text(l) })
+        }
+    }
+    if (vm.dayMode == 1) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEachIndexed { i, l ->
+            FilterChip(selected = (vm.dayMask shr i) and 1 == 1, onClick = { vm.saveDaySchedule(mask = vm.dayMask xor (1 shl i)) }, label = { Text(l) })
+        }
+    }
+    if (vm.dayMode == 2) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            var w by remember(vm.dayWork) { mutableStateOf(vm.dayWork.toString()) }
+            var o by remember(vm.dayOff) { mutableStateOf(vm.dayOff.toString()) }
+            val kb = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+            OutlinedTextField(value = w, onValueChange = { w = it.filter(Char::isDigit).take(2); w.toIntOrNull()?.let { n -> if (n > 0) vm.saveDaySchedule(work = n) } }, label = { Text("Рабочих") }, singleLine = true, keyboardOptions = kb, modifier = Modifier.weight(1f))
+            Text("через")
+            OutlinedTextField(value = o, onValueChange = { o = it.filter(Char::isDigit).take(2); o.toIntOrNull()?.let { n -> if (n > 0) vm.saveDaySchedule(off = n) } }, label = { Text("Выходных") }, singleLine = true, keyboardOptions = kb, modifier = Modifier.weight(1f))
+        }
+        val anchor = java.time.LocalDate.ofEpochDay(vm.dayAnchor)
+        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Первый рабочий день: %02d.%02d.%d".format(anchor.dayOfMonth, anchor.monthValue, anchor.year), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { vm.saveDaySchedule(anchor = java.time.LocalDate.now().toEpochDay()) }) { Text("Сегодня") }
+        }
+        Text(
+            "Начало графика — первый из рабочих дней цикла. Если сегодня первый рабочий день, нажмите «Сегодня».",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+    val next = (0..60).map { java.time.LocalDate.now().plusDays(it.toLong()) }.filter { vm.isDayScheduled(it) }.take(6)
+    Text(
+        "Ближайшие дни: " + next.joinToString(", ") { "%02d.%02d".format(it.dayOfMonth, it.monthValue) },
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 4.dp),
     )
     if (snippets.isNotEmpty()) {
         Text("Какие заметки создавать:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
