@@ -83,7 +83,17 @@ object ReminderNotifier {
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_reminder)
             .setContentTitle(e.title.ifBlank { "Напоминание" })
-            .setContentText(if (e.label.isNotBlank()) "Вы рядом: ${e.label}" else "Вы пришли на место")
+            .setContentText(
+                if (e.items.isNotEmpty()) e.items.joinToString(", ")
+                else if (e.label.isNotBlank()) "Вы рядом: ${e.label}" else "Вы пришли на место",
+            )
+            .apply {
+                if (e.items.isNotEmpty()) setStyle(
+                    NotificationCompat.BigTextStyle().bigText(
+                        (if (e.label.isNotBlank()) "Вы рядом: ${e.label}\n" else "") + e.items.joinToString("\n") { "• $it" },
+                    ),
+                )
+            }
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)

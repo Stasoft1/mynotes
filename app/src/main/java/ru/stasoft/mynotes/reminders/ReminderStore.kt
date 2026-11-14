@@ -35,6 +35,8 @@ data class GeoEntry(
     val label: String,
     val once: Boolean,
     val firedAt: Long = 0,
+    /** Пункты списка покупок: показываются в уведомлении, когда вы пришли на место. */
+    val items: List<String> = emptyList(),
 )
 
 data class IndexData(
@@ -101,6 +103,7 @@ object ReminderStore {
                         id = o.getLong("id"), title = o.getString("title"),
                         lat = o.getDouble("lat"), lon = o.getDouble("lon"), radius = o.getInt("radius"),
                         label = o.optString("label", ""), once = o.optBoolean("once", true), firedAt = o.optLong("firedAt", 0),
+                        items = o.optJSONArray("items")?.let { ar -> (0 until ar.length()).map { ar.getString(it) } } ?: emptyList(),
                     )
                 }
             } ?: emptyList()
@@ -130,7 +133,7 @@ object ReminderStore {
             data.places.forEach { p ->
                 a.put(
                     JSONObject().put("id", p.id).put("title", p.title).put("lat", p.lat).put("lon", p.lon)
-                        .put("radius", p.radius).put("label", p.label).put("once", p.once).put("firedAt", p.firedAt),
+                        .put("radius", p.radius).put("label", p.label).put("once", p.once).put("firedAt", p.firedAt).put("items", org.json.JSONArray(p.items)),
                 )
             }
         })

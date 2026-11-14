@@ -23,6 +23,13 @@ object GeoSync {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
 
+    /** Что показать в уведомлении: неотмеченные пункты списка либо первые строки текста. */
+    private fun shoppingItems(n: NoteEntity): List<String> {
+        val lines = n.body.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val src = if (n.checklist) lines.filter { !it.startsWith("[x] ") && !it.startsWith("[X] ") } else lines
+        return src.take(12)
+    }
+
     /** Пересобирает места из заметок (сохраняя, какие уже сработали) и заново регистрирует геозоны. */
     fun rebuild(ctx: Context, notes: List<NoteEntity>) {
         ReminderStore.update(ctx) { data ->
@@ -35,6 +42,7 @@ object GeoSync {
                 GeoEntry(
                     n.id, n.displayTitle(), lat, lon, n.geoRadius.coerceIn(50, 5000), n.geoLabel, n.geoOnce,
                     if (same) prev!!.firedAt else 0,
+                    shoppingItems(n),
                 )
             }
             data.copy(places = places)
