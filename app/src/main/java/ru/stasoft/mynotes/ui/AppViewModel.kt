@@ -41,6 +41,9 @@ import ru.stasoft.mynotes.data.ReadingIssue
 import ru.stasoft.mynotes.data.expandWithVars
 import ru.stasoft.mynotes.data.expandSnippet
 import ru.stasoft.mynotes.data.searchNotes
+import ru.stasoft.mynotes.data.resolveTitle
+import ru.stasoft.mynotes.data.formatValues
+import ru.stasoft.mynotes.data.displayTitle
 import ru.stasoft.mynotes.data.parseSpans
 import ru.stasoft.mynotes.data.spansToJson
 import ru.stasoft.mynotes.data.dateInTitle
@@ -612,6 +615,53 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             walk(id, null, 1)
             ru.stasoft.mynotes.data.fuelSummary(fills)
+        }
+    }
+
+    /** PDF заметки или всей папки [id] (null — текущая папка/вся база) и окно «Поделиться». */
+    fun exportPdf(id: Long?) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            try {
+                val nums = numbers.value
+                val blocks = ArrayList<ru.stasoft.mynotes.ui.PdfBlock>()
+                fun titleOf(n: NoteEntity) = resolveTitle(n.displayTitle(), nums[n.id]).ifBlank { "Без названия" }
+                fun bodyOf(n: NoteEntity): String =
+                    if (n.checklist) n.body.split("\n").joinToString("\n") { if (it.startsWith("[x] ") || it.startsWith("[X] ")) "☑ " + it.drop(4) else "☐ $it" }
+                    else n.body
+                suspend fun walk(parent: Long?, level: Int) {
+                    for (n in dao.childrenOnce(parent)) {
+                        if (n.isFolder) {
+                            blocks.add(ru.stasoft.mynotes.ui.PdfBlock(titleOf(n), if (level == 1) 1 else 2))
+                            nums[n.id]?.takeIf { it.isNotEmpty() }?.let { blocks.add(ru.stasoft.mynotes.ui.PdfBlock(formatValues(it), 0)) }
+                            if (level < 12) walk(n.id, level + 1)
+                        } else {
+                            blocks.add(ru.stasoft.mynotes.ui.PdfBlock(titleOf(n), 2))
+                            if (n.body.isNotBlank()) blocks.add(ru.stasoft.mynotes.ui.PdfBlock(bodyOf(n), 0))
+                        }
+                    }
+                }
+                val root = id?.let { dao.get(it) }
+                val name: String
+                if (root == null) {
+                    name = "Заметки"
+                    walk(folderId.value, 1)
+                } else if (root.isFolder) {
+                    name = titleOf(root)
+                    blocks.add(ru.stasoft.mynotes.ui.PdfBlock(name, 1))
+                    nums[root.id]?.takeIf { it.isNotEmpty() }?.let { blocks.add(ru.stasoft.mynotes.ui.PdfBlock(formatValues(it), 0)) }
+                    walk(root.id, 2)
+                } else {
+                    name = titleOf(root)
+                    blocks.add(ru.stasoft.mynotes.ui.PdfBlock(name, 1))
+                    if (root.body.isNotBlank()) blocks.add(ru.stasoft.mynotes.ui.PdfBlock(bodyOf(root), 0))
+                }
+                if (blocks.isEmpty()) { message = "Нечего экспортировать"; return@launch }
+                val f = withContext(Dispatchers.Default) { ru.stasoft.mynotes.ui.PdfExport.write(app, name, blocks) }
+                ru.stasoft.mynotes.ui.PdfExport.share(app, f)
+            } catch (e: Exception) {
+                message = "Не удалось создать PDF: ${e.message}"
+            }
         }
     }
 

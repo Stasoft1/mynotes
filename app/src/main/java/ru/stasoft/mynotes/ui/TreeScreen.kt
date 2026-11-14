@@ -269,6 +269,13 @@ fun TreeScreen(vm: AppViewModel) {
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text(if (vm.selectedId != null) "Экспорт выбранного в PDF" else "Экспорт папки в PDF") },
+                            onClick = {
+                                menuOpen = false
+                                vm.exportPdf(vm.selectedId)
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Статистика заправок…") },
                             onClick = {
                                 menuOpen = false

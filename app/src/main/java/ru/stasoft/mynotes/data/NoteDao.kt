@@ -62,6 +62,9 @@ interface NoteDao {
     @Query("SELECT COALESCE(MAX(sortIndex), -1) FROM notes WHERE parentId IS :parentId")
     suspend fun maxSort(parentId: Long?): Int
 
+    @Query("SELECT * FROM notes WHERE parentId IS :parentId ORDER BY sortIndex ASC, id ASC")
+    suspend fun childrenOnce(parentId: Long?): List<NoteEntity>
+
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun get(id: Long): NoteEntity?
 
