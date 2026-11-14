@@ -8,13 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class], version = 12, exportSchema = true)
+@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class, CarEntity::class, ServiceItemEntity::class], version = 13, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
     companion object {
         /** Версия схемы (для проверки копий). */
-        const val VERSION = 12
+        const val VERSION = 13
 
         /** Последняя открытая база: нужна резервным копиям, чтобы сбросить журнал перед копированием. */
         @Volatile
@@ -116,12 +116,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `cars` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `aliases` TEXT NOT NULL, `isDefault` INTEGER NOT NULL, `sortIndex` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `service_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`carId` INTEGER NOT NULL, `name` TEXT NOT NULL, `everyKm` INTEGER NOT NULL, `everyMonths` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         /** Открывает зашифрованную базу. [key] — мастер-ключ из Vault; вызывающий затирает его сам. */
         fun open(context: Context, key: ByteArray): AppDatabase {
             val factory = SupportOpenHelperFactory(key.copyOf())
             return Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .build()
                 .also { current = it }
         }

@@ -3,7 +3,7 @@ package ru.stasoft.mynotes.data
 import java.time.LocalDate
 
 /** Одна заправка из заметки: Литры, ЦенаБ, СуммаБ, Пробег. */
-data class Fill(val date: LocalDate?, val litres: Double, val price: Double, val sum: Double, val odo: Double?)
+data class Fill(val date: LocalDate?, val litres: Double, val price: Double, val sum: Double, val odo: Double?, val car: String? = null)
 
 /** Участок между двумя заправками по пробегу (метод «до полного бака»: литры берутся с более поздней заправки). */
 data class FuelLeg(val date: LocalDate?, val km: Double, val per100: Double, val costKm: Double)
@@ -25,7 +25,7 @@ fun parseFill(head: String, date: LocalDate?): Fill? {
     val price0 = parseNoteNumber(head, "ЦенаБ") ?: parseNoteNumber(head, "Цена")
     val price = price0 ?: sum0?.let { it / litres } ?: return null
     val sum = sum0 ?: (price * litres)
-    return Fill(date, litres, price, sum, parseNoteNumber(head, "Пробег"))
+    return Fill(date, litres, price, sum, parseNoteNumber(head, "Пробег"), fieldText(head, "Авто")?.takeIf { it.isNotBlank() })
 }
 
 fun fuelSummary(all: List<Fill>): FuelSummary {

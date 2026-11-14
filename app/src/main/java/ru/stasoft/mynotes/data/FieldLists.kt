@@ -26,6 +26,8 @@ object FieldLists {
     /** Значения, подходящие к уже набранному началу [typed]; точное совпадение не предлагается. */
     fun filter(values: List<String>, typed: String): List<String> {
         val t = typed.trim()
+        // Значение уже выбрано: показываем остальные, чтобы его можно было заменить одним нажатием.
+        if (values.any { it.equals(t, ignoreCase = true) }) return values.filter { !it.equals(t, ignoreCase = true) }
         return values.filter { t.isEmpty() || (it.startsWith(t, ignoreCase = true) && !it.equals(t, ignoreCase = true)) }
     }
 

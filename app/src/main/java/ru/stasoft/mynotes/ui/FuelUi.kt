@@ -1,7 +1,9 @@
 package ru.stasoft.mynotes.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,8 +34,10 @@ private fun f2(v: Double) = String.format(java.util.Locale("ru"), "%.2f", v)
 fun FuelDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
     var st by remember { mutableStateOf<FuelSummary?>(null) }
     var loaded by remember { mutableStateOf(false) }
-    LaunchedEffect(folderId) {
-        st = vm.fuelStats(folderId)
+    val cars by vm.cars.collectAsState()
+    var car by remember { mutableStateOf<String?>(vm.defaultCar()?.name?.takeIf { vm.cars.value.size > 1 }) }
+    LaunchedEffect(folderId, car) {
+        st = vm.fuelStats(folderId, car)
         loaded = true
     }
     AlertDialog(
@@ -42,6 +46,13 @@ fun FuelDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
         text = {
             val s = st
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (cars.size > 1) androidx.compose.foundation.layout.Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                ) {
+                    androidx.compose.material3.FilterChip(selected = car == null, onClick = { car = null }, label = { Text("Все") })
+                    cars.forEach { c -> androidx.compose.material3.FilterChip(selected = car == c.name, onClick = { car = c.name }, label = { Text(c.name) }) }
+                }
                 if (!loaded) Text("Считаю…")
                 else if (s == null || s.fills.isEmpty()) Text("В этой папке нет заметок с полями «Литры:», «ЦенаБ:» или «СуммаБ:». Откройте нужную папку (например, год) и повторите.")
                 else {

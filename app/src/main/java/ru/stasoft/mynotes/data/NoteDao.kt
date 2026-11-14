@@ -84,6 +84,36 @@ interface NoteDao {
     @Query("DELETE FROM photos WHERE noteId NOT IN (SELECT id FROM notes)")
     suspend fun deleteOrphanPhotos()
 
+    @Query("SELECT * FROM cars ORDER BY sortIndex, id")
+    fun cars(): Flow<List<CarEntity>>
+
+    @Insert
+    suspend fun insertCar(c: CarEntity): Long
+
+    @Update
+    suspend fun updateCar(c: CarEntity)
+
+    @Query("DELETE FROM cars WHERE id = :id")
+    suspend fun deleteCar(id: Long)
+
+    @Query("DELETE FROM service_items WHERE carId = :carId")
+    suspend fun deleteServiceItemsOf(carId: Long)
+
+    @Query("UPDATE cars SET isDefault = (id = :id)")
+    suspend fun setDefaultCar(id: Long)
+
+    @Query("SELECT * FROM service_items ORDER BY carId, id")
+    fun serviceItems(): Flow<List<ServiceItemEntity>>
+
+    @Insert
+    suspend fun insertServiceItem(s: ServiceItemEntity): Long
+
+    @Update
+    suspend fun updateServiceItem(s: ServiceItemEntity)
+
+    @Query("DELETE FROM service_items WHERE id = :id")
+    suspend fun deleteServiceItem(id: Long)
+
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun get(id: Long): NoteEntity?
 

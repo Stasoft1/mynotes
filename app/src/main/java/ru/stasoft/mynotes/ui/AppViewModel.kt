@@ -613,7 +613,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Заправки в поддереве папки [id] (null — вся база): заметки с полем «Литры:». */
-    suspend fun fuelStats(id: Long?): ru.stasoft.mynotes.data.FuelSummary? {
+    suspend fun fuelStats(id: Long?, car: String? = null): ru.stasoft.mynotes.data.FuelSummary? {
         val dao = dao() ?: return null
         val rows = dao.titleRows()
         return withContext(Dispatchers.Default) {
@@ -627,7 +627,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 }
             }
             walk(id, null, 1)
-            ru.stasoft.mynotes.data.fuelSummary(fills)
+            // Заправки без «Авто:» относятся к машине по умолчанию.
+            val dflt = if (Modules.on("auto")) defaultCar()?.name else null
+            val mine = if (car == null) fills else fills.filter { (it.car ?: dflt) == car }
+            ru.stasoft.mynotes.data.fuelSummary(mine)
         }
     }
 
@@ -810,7 +813,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         viewModelScope.launch {
             val parent = folderId.value
-            val (text, spans) = expandTemplate(s.text, s.spansJson, parent)
+            val (text0, spans) = expandTemplate(s.text, s.spansJson, parent)
+            val text = withCar(text0)
             val id = dao.insert(
                 NoteEntity(
                     parentId = parent, title = expandSnippet(s.title), body = text, spansJson = spans,
@@ -855,7 +859,73 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Подсказки от модулей (например, «Авто» — названия машин). */
-    private fun moduleFieldValues(name: String): List<String> = emptyList()
+    private fun moduleFieldValues(name: String): List<String> =
+        if (Modules.on("auto") && name.equals("Авто", ignoreCase = true)) cars.value.map { it.name } else emptyList()
+
+    // ---------- модуль «Авто» ----------
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val cars: StateFlow<List<ru.stasoft.mynotes.data.CarEntity>> =
+        dbFlow.flatMapLatest { db -> db?.notes()?.cars() ?: flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val serviceItems: StateFlow<List<ru.stasoft.mynotes.data.ServiceItemEntity>> =
+        dbFlow.flatMapLatest { db -> db?.notes()?.serviceItems() ?: flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun defaultCar(): ru.stasoft.mynotes.data.CarEntity? = cars.value.firstOrNull { it.isDefault } ?: cars.value.firstOrNull()
+
+    fun saveCar(c: ru.stasoft.mynotes.data.CarEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val id = if (c.id == 0L) dao.insertCar(c.copy(sortIndex = cars.value.size, isDefault = c.isDefault || cars.value.isEmpty())) else { dao.updateCar(c); c.id }
+            if (c.isDefault) dao.setDefaultCar(id)
+        }
+    }
+
+    fun deleteCar(c: ru.stasoft.mynotes.data.CarEntity) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            dao.deleteCar(c.id)
+            dao.deleteServiceItemsOf(c.id)
+            if (c.isDefault) cars.value.firstOrNull { it.id != c.id }?.let { dao.setDefaultCar(it.id) }
+        }
+    }
+
+    /** Строка «Авто:» для новой заметки про машину: по сказанному, иначе машина по умолчанию. Только если машин больше одной. */
+    private fun withCar(body: String, spoken: String = ""): String {
+        if (!Modules.on("auto") || cars.value.size < 2 || !ru.stasoft.mynotes.data.isAutoNote(body)) return body
+        val car = ru.stasoft.mynotes.data.pickCar(spoken, cars.value) ?: defaultCar() ?: return body
+        return ru.stasoft.mynotes.data.withCarLine(body, car.name)
+    }
+
+    /**
+     * Старые заметки про машину без поля «Авто:» привязываются к [car]: строка добавляется в конец текста.
+     * Даты [from]..[to] берутся из папок дня; пустые — без ограничения. Возвращает число заметок.
+     */
+    suspend fun assignCar(car: String, from: java.time.LocalDate?, to: java.time.LocalDate?): Int {
+        val dao = dao() ?: return 0
+        val rows = dao.titleRows()
+        val kids = rows.groupBy { it.parentId }
+        val ids = ArrayList<Long>()
+        fun walk(parent: Long?, inherited: java.time.LocalDate?, depth: Int) {
+            for (r in kids[parent].orEmpty()) {
+                val date = (if (r.isFolder) dateInTitle(r.title) else null) ?: inherited
+                if (r.isFolder) { if (depth < 12) walk(r.id, date, depth + 1); continue }
+                if (!ru.stasoft.mynotes.data.isAutoNote(r.head) || ru.stasoft.mynotes.data.fieldText(r.head, "Авто") != null) continue
+                if (from != null && (date == null || date.isBefore(from))) continue
+                if (to != null && (date == null || date.isAfter(to))) continue
+                ids.add(r.id)
+            }
+        }
+        walk(null, null, 1)
+        for (id in ids) {
+            val n = dao.get(id) ?: continue
+            dao.update(n.copy(body = ru.stasoft.mynotes.data.withCarLine(n.body, car)))
+        }
+        return ids.size
+    }
 
     // ---------- фото ----------
 
@@ -1004,7 +1074,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val keys = templateFieldKeys(text)
         val (body, filled) = fillTemplateFromSpeech(text, m.rest)
         if (keys.isNotEmpty() && filled == 0) return null
-        val full = if (keys.isEmpty() && m.rest.isNotBlank()) body.trimEnd() + "\n" + m.rest else body
+        val full = withCar(if (keys.isEmpty() && m.rest.isNotBlank()) body.trimEnd() + "\n" + m.rest else body, spoken)
         return VoiceDraft(spoken, title, full, parent, folderName, false)
     }
 
@@ -1035,7 +1105,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             val (body, _) = fillTemplateFromMap(text, map)
             val title = expandSnippet(tpl.title).ifBlank { tpl.label }
             val full = if (extra.isNotBlank() && templateFieldKeys(text).none { it.contains("примеч", true) }) body.trimEnd() + "\n" + extra else body
-            return VoiceDraft(spoken, title, full, parent, folderName, true)
+            return VoiceDraft(spoken, title, withCar(full, spoken), parent, folderName, true)
         }
         val title = json.optString("title", "").trim().ifBlank { plainVoiceNote(spoken).first }
         return VoiceDraft(spoken, title, extra.ifBlank { plainVoiceNote(spoken).second }, parent, folderName, true)
