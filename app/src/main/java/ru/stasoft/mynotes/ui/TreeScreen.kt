@@ -189,6 +189,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showSort by remember { mutableStateOf(false) }
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
+    var showFuel by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
@@ -265,6 +266,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 showReport = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Статистика заправок…") },
+                            onClick = {
+                                menuOpen = false
+                                showFuel = true
                             },
                         )
                         DropdownMenuItem(
@@ -564,6 +572,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSnippets) SnippetsDialog(vm, onDismiss = { showSnippets = false })
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
+    if (showFuel) FuelDialog(vm, folderId, onDismiss = { showFuel = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
     if (showBackup) BackupDialog(vm, onDismiss = { showBackup = false })
     if (showSettings) SettingsDialog(

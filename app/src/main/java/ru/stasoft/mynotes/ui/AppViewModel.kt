@@ -596,6 +596,25 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Заправки в поддереве папки [id] (null — вся база): заметки с полем «Литры:». */
+    suspend fun fuelStats(id: Long?): ru.stasoft.mynotes.data.FuelSummary? {
+        val dao = dao() ?: return null
+        val rows = dao.titleRows()
+        return withContext(Dispatchers.Default) {
+            val kids = rows.groupBy { it.parentId }
+            val fills = ArrayList<ru.stasoft.mynotes.data.Fill>()
+            fun walk(parent: Long?, inherited: java.time.LocalDate?, depth: Int) {
+                for (r in kids[parent].orEmpty()) {
+                    val date = (if (r.isFolder) dateInTitle(r.title) else null) ?: inherited
+                    if (r.isFolder) { if (depth < 12) walk(r.id, date, depth + 1) }
+                    else ru.stasoft.mynotes.data.parseFill(r.head, date)?.let { fills.add(it) }
+                }
+            }
+            walk(id, null, 1)
+            ru.stasoft.mynotes.data.fuelSummary(fills)
+        }
+    }
+
     /** Переход в папку по id (из карточки «Сегодня»). */
     fun openFolderById(id: Long) {
         val dao = dao() ?: return
