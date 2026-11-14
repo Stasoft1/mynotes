@@ -826,6 +826,37 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- списки значений полей ----------
+
+    var fieldLists by mutableStateOf(ru.stasoft.mynotes.data.FieldLists.parse(uiPrefs().getString("field_lists", "") ?: ""))
+        private set
+
+    fun saveFieldList(name: String, values: List<String>, oldName: String? = null) {
+        val m = LinkedHashMap(fieldLists)
+        if (oldName != null) m.remove(oldName)
+        val n = name.trim().trimEnd(':').trim()
+        val v = values.map { it.trim() }.filter { it.isNotEmpty() }
+        if (n.isNotEmpty() && v.isNotEmpty()) m[n] = v
+        fieldLists = m
+        uiPrefs().edit().putString("field_lists", ru.stasoft.mynotes.data.FieldLists.toJson(m)).apply()
+    }
+
+    fun deleteFieldList(name: String) {
+        val m = LinkedHashMap(fieldLists)
+        m.remove(name)
+        fieldLists = m
+        uiPrefs().edit().putString("field_lists", ru.stasoft.mynotes.data.FieldLists.toJson(m)).apply()
+    }
+
+    /** Значения для подсказки поля [name] (без учёта регистра): списки пользователя плюс те, что дают включённые модули. */
+    fun fieldValues(name: String): List<String> {
+        val own = fieldLists.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value.orEmpty()
+        return (own + moduleFieldValues(name)).distinct()
+    }
+
+    /** Подсказки от модулей (например, «Авто» — названия машин). */
+    private fun moduleFieldValues(name: String): List<String> = emptyList()
+
     // ---------- фото ----------
 
     @OptIn(ExperimentalCoroutinesApi::class)

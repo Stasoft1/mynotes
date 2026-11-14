@@ -121,6 +121,8 @@ fun SettingsDialog(
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     ModulesSection(vm)
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    FieldListsSection(vm)
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     if (ru.stasoft.mynotes.modules.Modules.on("day")) {
                         AutoDaySettingsSection(vm)
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))

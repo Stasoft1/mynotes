@@ -475,6 +475,26 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .weight(1f)
                     .onFocusChanged { if (it.isFocused) titleFocused = false }
             )
+            // Подсказка значений: курсор в строке «Поле: …», у поля есть список.
+            val fieldLine = if (!bodyField.selection.collapsed || titleFocused || note.readOnly || note.checklist) null
+            else ru.stasoft.mynotes.data.FieldLists.lineAt(bodyField.text, bodyField.selection.start)
+            val fieldOptions = fieldLine?.let { ru.stasoft.mynotes.data.FieldLists.filter(vm.fieldValues(it.name), it.typed) }.orEmpty()
+            if (fieldLine != null && fieldOptions.isNotEmpty()) Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            ) {
+                fieldOptions.forEach { opt ->
+                    androidx.compose.material3.AssistChip(
+                        onClick = {
+                            val t = bodyField.text
+                            val line = fieldLine.name + ": " + opt
+                            val nt = t.replaceRange(fieldLine.start, fieldLine.end, line)
+                            updateBody(TextFieldValue(nt, androidx.compose.ui.text.TextRange(fieldLine.start + line.length)))
+                        },
+                        label = { Text(opt) },
+                    )
+                }
+            }
             if (!note.checklist) Column(
                 Modifier
                     .fillMaxWidth()
