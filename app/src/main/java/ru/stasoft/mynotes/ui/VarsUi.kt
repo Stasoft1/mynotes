@@ -174,6 +174,7 @@ fun VarsSection(
                                 ).filter { it.name !in have },
                             )
                         })
+                    }
                 }
             }
         }
