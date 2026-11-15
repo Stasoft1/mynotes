@@ -3,6 +3,7 @@ package ru.stasoft.mynotes.modules
 import android.content.Context
 import androidx.compose.runtime.getValue
 import ru.stasoft.mynotes.BuildConfig
+import ru.stasoft.mynotes.data.EXTRA_MODULES
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -15,17 +16,16 @@ class ModuleInfo(val id: String, val title: String, val description: String)
  * ни в редакторе. Состояние читается из Compose, поэтому интерфейс обновляется сразу.
  */
 object Modules {
-    private val everything = listOf(
+    private val everything = EXTRA_MODULES + listOf(
         ModuleInfo("auto", "Авто", "Машины, заправки, расход, ТО и ремонты с напоминаниями по пробегу и времени"),
         ModuleInfo("day", "Папка дня", "Каждый новый день сама создаёт папку с датой и заметки из шаблонов"),
         ModuleInfo("geo", "Напоминания по месту", "Уведомление, когда вы приходите в выбранное место на карте; списки покупок по магазину"),
         ModuleInfo("route", "Маршрут к адресу", "Кнопка «Маршрут» для заметок с адресом"),
-        ModuleInfo("f1", "Заявки Ф1", "Приведение скопированной заявки к шаблону Ф1"),
         ModuleInfo("giga", "ИИ-разбор голоса (GigaChat)", "Непонятные голосовые фразы разбирает GigaChat; нужен свой ключ"),
     )
 
     /** Модули этой редакции: «Заявки Ф1» есть только в personal. */
-    val all: List<ModuleInfo> = everything.filter { it.id != "f1" || BuildConfig.PERSONAL }
+    val all: List<ModuleInfo> = everything
 
     private const val PREFS = "modules"
     private var enabled by mutableStateOf<Set<String>>(emptySet())
@@ -41,7 +41,7 @@ object Modules {
         ready = true
     }
 
-    fun on(id: String): Boolean = (id != "f1" || BuildConfig.PERSONAL) && id in enabled
+    fun on(id: String): Boolean = id in enabled && (id != "f1" || BuildConfig.PERSONAL)
 
     fun set(ctx: Context, id: String, on: Boolean) {
         enabled = if (on) enabled + id else enabled - id

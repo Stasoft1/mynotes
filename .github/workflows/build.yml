@@ -35,17 +35,28 @@ jobs:
             app/build/outputs/mapping/*/mapping.txt
           if-no-files-found: error
 
-      - name: Publish APKs to the "latest" release
+      - name: Publish public APK to the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VER=$(grep -rhoP 'versionName = "\K[^"]+' app/build.gradle* | head -1)
-          cp app/build/outputs/apk/personal/release/app-personal-release.apk "MyNotes-personal-$VER.apk"
           cp app/build/outputs/apk/public/release/app-public-release.apk "MyNotes-$VER.apk"
-          # Запасной вариант personal без сжатия кода: если в release что-то сломается, его можно поставить поверх.
-          cp app/build/outputs/apk/personal/debug/app-personal-debug.apk MyNotes-personal-debug.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest "MyNotes-$VER.apk" "MyNotes-personal-$VER.apk" MyNotes-personal-debug.apk --prerelease \
+          gh release create latest "MyNotes-$VER.apk" --prerelease \
             --target "${{ github.sha }}" \
             --title "Последняя сборка (версия $VER)" \
-            --notes "Версия $VER. Сборка из коммита ${{ github.sha }}. MyNotes-$VER.apk — публичная редакция (модули выключены), MyNotes-personal-$VER.apk — персональная (всё включено)."
+            --notes "Версия $VER."
+
+      - name: Publish personal APKs to the private "mine" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(grep -rhoP 'versionName = "\K[^"]+' app/build.gradle* | head -1)
+          cp app/build/outputs/apk/personal/release/app-personal-release.apk "Mine-$VER.apk"
+          # Запасной вариант без сжатия кода: если в release что-то сломается, его можно поставить поверх.
+          cp app/build/outputs/apk/personal/debug/app-personal-debug.apk Mine-debug.apk
+          gh release delete mine --yes --cleanup-tag || true
+          gh release create mine "Mine-$VER.apk" Mine-debug.apk --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Личная сборка (версия $VER)" \
+            --notes "Только для владельца."

@@ -33,3 +33,8 @@ val VAR_PRESETS: List<Pair<String, List<VarDef>>> = listOf(
         VarDef("Остаток кокс", "balance", formula = "{Взял кокс} - {Кабель кокс}"),
     ),
 )
+
+/** Дополнительные модули редакции. */
+val EXTRA_MODULES: List<ru.stasoft.mynotes.modules.ModuleInfo> = listOf(
+    ru.stasoft.mynotes.modules.ModuleInfo("f1", "Заявки Ф1", "Приведение скопированной заявки к шаблону Ф1"),
+)

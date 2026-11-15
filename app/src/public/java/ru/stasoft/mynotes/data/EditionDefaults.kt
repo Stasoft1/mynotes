@@ -21,3 +21,6 @@ val VAR_PRESETS: List<Pair<String, List<VarDef>>> = listOf(
         VarDef("Приход", "sum"), VarDef("Расход", "sum"), VarDef("Остаток", "balance", formula = "{Приход} - {Расход}"),
     ),
 )
+
+/** Дополнительных модулей в публичной редакции нет. */
+val EXTRA_MODULES: List<ru.stasoft.mynotes.modules.ModuleInfo> = emptyList()
