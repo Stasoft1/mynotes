@@ -121,58 +121,11 @@ fun VarsSection(
             androidx.compose.foundation.layout.Box {
                 FilledTonalButton(onClick = { presets = true }) { Text("Готовый набор ▾") }
                 DropdownMenu(expanded = presets, onDismissRequest = { presets = false }) {
-                    if (ru.stasoft.mynotes.BuildConfig.PERSONAL) {
-                    DropdownMenuItem(text = { Text("Заявки: Сумма, Пробег, За период") }, onClick = {
-                        presets = false
-                        val have = own.map { it.name }.toSet() + inheritedNames
-                        onChange(
-                            own + listOf(
-                                VarDef("Сумма", "sum"),
-                                VarDef("Пробег", "max"),
-                                VarDef("За период", "span", field = "Пробег"),
-                            ).filter { it.name !in have },
-                        )
-                    })
-                    DropdownMenuItem(text = { Text("Кабель: расход, взял, остаток") }, onClick = {
-                        presets = false
-                        val have = own.map { it.name }.toSet() + inheritedNames
-                        onChange(
-                            own + listOf(
-                                VarDef("Кабель вп", "sum"),
-                                VarDef("Кабель кокс", "sum"),
-                                VarDef("Взял вп", "sum"),
-                                VarDef("Взял кокс", "sum"),
-                                VarDef("Остаток вп", "balance", formula = "{Взял вп} - {Кабель вп}"),
-                                VarDef("Остаток кокс", "balance", formula = "{Взял кокс} - {Кабель кокс}"),
-                            ).filter { it.name !in have },
-                        )
-                    })
-                    } else {
-                        DropdownMenuItem(text = { Text("Деньги: Сумма") }, onClick = {
+                    ru.stasoft.mynotes.data.VAR_PRESETS.forEach { (label, defs) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = {
                             presets = false
                             val have = own.map { it.name }.toSet() + inheritedNames
-                            onChange(own + listOf(VarDef("Сумма", "sum")).filter { it.name !in have })
-                        })
-                        DropdownMenuItem(text = { Text("Счётчик: показание и расход") }, onClick = {
-                            presets = false
-                            val have = own.map { it.name }.toSet() + inheritedNames
-                            onChange(
-                                own + listOf(
-                                    VarDef("Показание", "max"),
-                                    VarDef("Расход", "span", field = "Показание"),
-                                ).filter { it.name !in have },
-                            )
-                        })
-                        DropdownMenuItem(text = { Text("Остаток: приход, расход, остаток") }, onClick = {
-                            presets = false
-                            val have = own.map { it.name }.toSet() + inheritedNames
-                            onChange(
-                                own + listOf(
-                                    VarDef("Приход", "sum"),
-                                    VarDef("Расход", "sum"),
-                                    VarDef("Остаток", "balance", formula = "{Приход} - {Расход}"),
-                                ).filter { it.name !in have },
-                            )
+                            onChange(own + defs.filter { it.name !in have })
                         })
                     }
                 }

@@ -9,27 +9,3 @@ fun expandSnippet(text: String, now: LocalDateTime = LocalDateTime.now()): Strin
         .replace("{сегодня}", now.format(DateTimeFormatter.ofPattern("dd.MM.yy")))
         .replace("{дата}", now.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")))
         .replace("{время}", now.format(DateTimeFormatter.ofPattern("HH:mm")))
-
-/** Начальный набор вставок (общий для всех папок): по образцу меню старого приложения. */
-val DEFAULT_SNIPPETS: List<Pair<String, String>> = listOf(
-    "Заявка" to "Договор: \nТелефон: +7\nРабота: \nСкорость мб: \nПримечание: \nwf name: \nwf pass: \n" +
-        "Кабель вп: \nКабель кокс: \nСвитч: \nПорт: \nСумма: \nПробег: ",
-    "Примечание" to "Примечание: ",
-    "Сумма" to "Сумма: ",
-    "Оклад" to "Оклад (2800)",
-    "Вдвоём с" to "Примечание: вдвоем с ",
-    "Разделитель" to "-------------------------------------\n",
-    "Дата" to "{сегодня}",
-    "Дата –" to "{сегодня} - ",
-    "Заправка" to "Заправка",
-)
-
-/** Нейтральный набор шаблонов для публичной редакции. */
-val PUBLIC_SNIPPETS: List<Pair<String, String>> = listOf(
-    "Дата" to "{сегодня}",
-    "Дата –" to "{сегодня} - ",
-    "Примечание" to "Примечание: ",
-    "Сумма" to "Сумма: ",
-    "Разделитель" to "-------------------------------------\n",
-    "Расходы" to "Магазин: \nСумма: \nПримечание: ",
-)

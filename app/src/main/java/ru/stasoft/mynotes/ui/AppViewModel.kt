@@ -231,22 +231,17 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = db.notes()
         if (!prefs.getBoolean("snippets_seeded", false)) {
             if (dao.snippetCount() == 0) {
-                (if (ru.stasoft.mynotes.BuildConfig.PERSONAL) DEFAULT_SNIPPETS else ru.stasoft.mynotes.data.PUBLIC_SNIPPETS).forEachIndexed { i, (label, text) ->
+                DEFAULT_SNIPPETS.forEachIndexed { i, (label, text) ->
                     dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = i))
                 }
             }
             prefs.edit().putBoolean("snippets_seeded", true).apply()
         }
-        // Шаблон заявки с переменными папки: добавляется один раз, существующие шаблоны не трогаем.
-        if (ru.stasoft.mynotes.BuildConfig.PERSONAL && !prefs.getBoolean("cable_template_seeded", false)) {
-            val sort = dao.maxSnippetSort() + 1
-            dao.insertSnippet(SnippetEntity(folderId = null, label = "Кабель: взял на склад", text = "Взял вп: \nВзял кокс: ", sortIndex = sort))
-            prefs.edit().putBoolean("cable_template_seeded", true).apply()
-        }
-        if (ru.stasoft.mynotes.BuildConfig.PERSONAL && !prefs.getBoolean("request_template_seeded", false)) {
-            val sort = dao.maxSnippetSort() + 1
-            dao.insertSnippet(SnippetEntity(folderId = null, label = REQUEST_TEMPLATE_LABEL, text = REQUEST_TEMPLATE, sortIndex = sort))
-            prefs.edit().putBoolean("request_template_seeded", true).apply()
+        // Разовые шаблоны редакции (в personal — рабочие шаблоны автора): добавляются один раз, существующие не трогаем.
+        for ((key, label, text) in ru.stasoft.mynotes.data.EXTRA_TEMPLATES) {
+            if (prefs.getBoolean(key, false)) continue
+            dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = dao.maxSnippetSort() + 1))
+            prefs.edit().putBoolean(key, true).apply()
         }
     }
 
@@ -1678,9 +1673,5 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val AUTO_LOCK_MS = 30_000L
-        const val REQUEST_TEMPLATE_LABEL = "Заявка (поля)"
-        const val REQUEST_TEMPLATE =
-            "Договор: \nТелефон: +7\nРабота: \nСкорость мб: \nПримечание: \nwf name: \nwf pass: \n" +
-                "Кабель вп: \nКабель кокс: \nСвитч: \nПорт: \n{переменные}"
     }
 }
