@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Стиль кнопок: 0 — объёмные (тёмные), 1 — «стеклянные» пастельные. */
+/** Стиль кнопок: 0 — объёмные (тёмные), 1 — «стеклянные», 2 — плоские, 3 — мягкие, 4 — контурные, 5 — градиентные, 6 — неон. */
 val LocalButtonStyle = compositionLocalOf { 0 }
 
 private val LAVENDER = Color(0xFFC9C2F5)
@@ -175,6 +175,18 @@ fun AppButton(
                 if (icon != null) {
                     Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
                     Box(Modifier.size(10.dp))
+                }
+                Text(text, color = fg, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    } else if (LocalButtonStyle.current >= 2) {
+        SkinBox(
+            LocalButtonStyle.current, modifier.height(50.dp), RoundedCornerShape(25.dp), tone, false, onClick, enabled, cornerDp = 25f,
+        ) { fg ->
+            Row(Modifier.padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+                    Box(Modifier.size(8.dp))
                 }
                 Text(text, color = fg, style = MaterialTheme.typography.titleMedium)
             }

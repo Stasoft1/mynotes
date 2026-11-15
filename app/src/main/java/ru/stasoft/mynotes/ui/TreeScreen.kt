@@ -110,7 +110,8 @@ private val BarColor = Color(0xFF1B2330)
 /** Тёмная панель кнопок сверху, листается по горизонтали (как в MyTreeNotes). */
 @Composable
 fun TopStrip(content: @Composable RowScope.() -> Unit) {
-    val glass = LocalButtonStyle.current == 1
+    val style = LocalButtonStyle.current
+    val glass = style != 0
     val dark = androidx.compose.material3.MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
@@ -120,7 +121,13 @@ fun TopStrip(content: @Composable RowScope.() -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (glass) androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow else BarColor)
+            .background(
+                when {
+                    style == 3 -> neuBase(dark)
+                    glass -> androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow
+                    else -> BarColor
+                },
+            )
             .statusBarsPadding()
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 4.dp),
@@ -131,7 +138,16 @@ fun TopStrip(content: @Composable RowScope.() -> Unit) {
 
 @Composable
 fun StripButton(icon: ImageVector, description: String, accent: Boolean = false, onClick: () -> Unit) {
-    if (LocalButtonStyle.current == 1) {
+    val skin = LocalButtonStyle.current
+    if (skin >= 2) {
+        val shape = if (skin == 3 || skin == 2) androidx.compose.foundation.shape.RoundedCornerShape(15.dp) else androidx.compose.foundation.shape.CircleShape
+        SkinBox(
+            skin, Modifier.padding(horizontal = 5.dp, vertical = 8.dp).size(44.dp), shape, description.hashCode(), accent, onClick,
+            cornerDp = 15f,
+        ) { fg -> Icon(icon, contentDescription = description, tint = fg, modifier = Modifier.size(24.dp)) }
+        return
+    }
+    if (skin == 1) {
         val dark = androidx.compose.material3.MaterialTheme.colorScheme.surface.luminance() < 0.5f
         GlassBox(
             Modifier.padding(horizontal = 4.dp, vertical = 7.dp).size(46.dp),

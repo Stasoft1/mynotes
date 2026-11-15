@@ -70,13 +70,13 @@ fun SettingsDialog(
                         }
                     }
                     SettingsTitle("Кнопки")
-                    listOf(0 to "Объёмные", 1 to "Стеклянные (пастельные)").forEach { (style, label) ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable { vm.chooseButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AppRadio(selected = vm.buttonStyle == style, onClick = { vm.chooseButtonStyle(style) })
-                            Text(label, modifier = Modifier.padding(start = 8.dp))
+                    BUTTON_SKINS.forEachIndexed { style, label ->
+                        Column(Modifier.fillMaxWidth().clickable { vm.chooseButtonStyle(style) }.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AppRadio(selected = vm.buttonStyle == style, onClick = { vm.chooseButtonStyle(style) })
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                            SkinPreview(style, Modifier.padding(start = 4.dp, top = 2.dp, bottom = 4.dp))
                         }
                     }
                     androidx.compose.material3.TextButton(
