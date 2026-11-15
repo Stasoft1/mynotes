@@ -15,6 +15,8 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+        // minSdk 31: все такие телефоны 64-разрядные, лишние библиотеки для других процессоров только раздувают файл.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // Постоянный ключ подписи, чтобы каждое новое APK обновляло установленное приложение, а не требовало удаления.
@@ -33,7 +35,9 @@ android {
             signingConfig = signingConfigs.getByName("sideload")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("sideload")
         }
     }
