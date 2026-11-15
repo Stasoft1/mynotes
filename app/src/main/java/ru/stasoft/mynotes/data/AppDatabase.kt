@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class, CarEntity::class, ServiceItemEntity::class], version = 13, exportSchema = true)
+@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class, CarEntity::class, ServiceItemEntity::class], version = 13, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
