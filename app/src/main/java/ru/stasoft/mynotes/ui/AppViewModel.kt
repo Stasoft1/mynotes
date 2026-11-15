@@ -231,19 +231,19 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = db.notes()
         if (!prefs.getBoolean("snippets_seeded", false)) {
             if (dao.snippetCount() == 0) {
-                DEFAULT_SNIPPETS.forEachIndexed { i, (label, text) ->
+                (if (ru.stasoft.mynotes.BuildConfig.PERSONAL) DEFAULT_SNIPPETS else ru.stasoft.mynotes.data.PUBLIC_SNIPPETS).forEachIndexed { i, (label, text) ->
                     dao.insertSnippet(SnippetEntity(folderId = null, label = label, text = text, sortIndex = i))
                 }
             }
             prefs.edit().putBoolean("snippets_seeded", true).apply()
         }
         // Шаблон заявки с переменными папки: добавляется один раз, существующие шаблоны не трогаем.
-        if (!prefs.getBoolean("cable_template_seeded", false)) {
+        if (ru.stasoft.mynotes.BuildConfig.PERSONAL && !prefs.getBoolean("cable_template_seeded", false)) {
             val sort = dao.maxSnippetSort() + 1
             dao.insertSnippet(SnippetEntity(folderId = null, label = "Кабель: взял на склад", text = "Взял вп: \nВзял кокс: ", sortIndex = sort))
             prefs.edit().putBoolean("cable_template_seeded", true).apply()
         }
-        if (!prefs.getBoolean("request_template_seeded", false)) {
+        if (ru.stasoft.mynotes.BuildConfig.PERSONAL && !prefs.getBoolean("request_template_seeded", false)) {
             val sort = dao.maxSnippetSort() + 1
             dao.insertSnippet(SnippetEntity(folderId = null, label = REQUEST_TEMPLATE_LABEL, text = REQUEST_TEMPLATE, sortIndex = sort))
             prefs.edit().putBoolean("request_template_seeded", true).apply()

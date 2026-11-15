@@ -23,29 +23,29 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
-      - name: Build release and debug APK
-        run: gradle :app:assembleRelease :app:assembleDebug --stacktrace
+      - name: Build APKs
+        run: gradle :app:assemblePersonalRelease :app:assemblePublicRelease :app:assemblePersonalDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: MyNotes-apk
           path: |
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/apk/*/release/*.apk
+            app/build/outputs/apk/personal/debug/*.apk
+            app/build/outputs/mapping/*/mapping.txt
           if-no-files-found: error
 
-      - name: Publish APK to the "latest" release
+      - name: Publish APKs to the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VER=$(grep -rhoP 'versionName = "\K[^"]+' app/build.gradle* | head -1)
-          cp app/build/outputs/apk/release/app-release.apk MyNotes.apk
-          cp MyNotes.apk "MyNotes-$VER.apk"
-          # Запасной вариант без сжатия кода: если в release что-то сломается, его можно поставить поверх.
-          cp app/build/outputs/apk/debug/app-debug.apk MyNotes-debug.apk
+          cp app/build/outputs/apk/personal/release/app-personal-release.apk "MyNotes-personal-$VER.apk"
+          cp app/build/outputs/apk/public/release/app-public-release.apk "MyNotes-$VER.apk"
+          # Запасной вариант personal без сжатия кода: если в release что-то сломается, его можно поставить поверх.
+          cp app/build/outputs/apk/personal/debug/app-personal-debug.apk MyNotes-personal-debug.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest MyNotes.apk "MyNotes-$VER.apk" MyNotes-debug.apk --prerelease \
+          gh release create latest "MyNotes-$VER.apk" "MyNotes-personal-$VER.apk" MyNotes-personal-debug.apk --prerelease \
             --target "${{ github.sha }}" \
             --title "Последняя сборка (версия $VER)" \
-            --notes "Версия $VER. Сборка из коммита ${{ github.sha }}"
+            --notes "Версия $VER. Сборка из коммита ${{ github.sha }}. MyNotes-$VER.apk — публичная редакция (модули выключены), MyNotes-personal-$VER.apk — персональная (всё включено)."

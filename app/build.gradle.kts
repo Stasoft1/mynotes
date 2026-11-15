@@ -13,8 +13,8 @@ android {
         applicationId = "ru.stasoft.mynotes"
         minSdk = 31
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         // minSdk 31: все такие телефоны 64-разрядные, лишние библиотеки для других процессоров только раздувают файл.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -27,6 +27,20 @@ android {
             storePassword = "mynotes-sideload"
             keyAlias = "mynotes"
             keyPassword = "mynotes-sideload"
+        }
+    }
+
+    // Две редакции из одного кода: personal (всё включено, личные шаблоны и Заявки Ф1) и public (модули выключены, нейтральные шаблоны).
+    // applicationId и подпись у них одинаковые, поэтому одну можно поставить поверх другой без потери данных.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("personal") {
+            dimension = "edition"
+            buildConfigField("boolean", "PERSONAL", "true")
+        }
+        create("public") {
+            dimension = "edition"
+            buildConfigField("boolean", "PERSONAL", "false")
         }
     }
 
@@ -53,6 +67,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

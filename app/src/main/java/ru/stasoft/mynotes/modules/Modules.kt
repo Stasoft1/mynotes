@@ -2,6 +2,7 @@ package ru.stasoft.mynotes.modules
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import ru.stasoft.mynotes.BuildConfig
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -14,7 +15,7 @@ class ModuleInfo(val id: String, val title: String, val description: String)
  * ни в редакторе. Состояние читается из Compose, поэтому интерфейс обновляется сразу.
  */
 object Modules {
-    val all = listOf(
+    private val everything = listOf(
         ModuleInfo("auto", "Авто", "Машины, заправки, расход, ТО и ремонты с напоминаниями по пробегу и времени"),
         ModuleInfo("day", "Папка дня", "Каждый новый день сама создаёт папку с датой и заметки из шаблонов"),
         ModuleInfo("geo", "Напоминания по месту", "Уведомление, когда вы приходите в выбранное место на карте; списки покупок по магазину"),
@@ -23,12 +24,15 @@ object Modules {
         ModuleInfo("giga", "ИИ-разбор голоса (GigaChat)", "Непонятные голосовые фразы разбирает GigaChat; нужен свой ключ"),
     )
 
+    /** Модули этой редакции: «Заявки Ф1» есть только в personal. */
+    val all: List<ModuleInfo> = everything.filter { it.id != "f1" || BuildConfig.PERSONAL }
+
     private const val PREFS = "modules"
     private var enabled by mutableStateOf<Set<String>>(emptySet())
     private var ready = false
 
-    /** Для новой установки по умолчанию включено всё, чтобы ничего не пропало; публичная сборка начинает с пустого набора. */
-    private val DEFAULT_ON = all.map { it.id }.toSet()
+    /** personal: включено всё, чтобы ничего не пропало; public: чистая установка без модулей, пользователь включает нужные сам. */
+    private val DEFAULT_ON: Set<String> = if (BuildConfig.PERSONAL) all.map { it.id }.toSet() else emptySet()
 
     fun init(ctx: Context) {
         if (ready) return
@@ -37,7 +41,7 @@ object Modules {
         ready = true
     }
 
-    fun on(id: String): Boolean = id in enabled
+    fun on(id: String): Boolean = (id != "f1" || BuildConfig.PERSONAL) && id in enabled
 
     fun set(ctx: Context, id: String, on: Boolean) {
         enabled = if (on) enabled + id else enabled - id

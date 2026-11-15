@@ -121,6 +121,7 @@ fun VarsSection(
             androidx.compose.foundation.layout.Box {
                 FilledTonalButton(onClick = { presets = true }) { Text("Готовый набор ▾") }
                 DropdownMenu(expanded = presets, onDismissRequest = { presets = false }) {
+                    if (ru.stasoft.mynotes.BuildConfig.PERSONAL) {
                     DropdownMenuItem(text = { Text("Заявки: Сумма, Пробег, За период") }, onClick = {
                         presets = false
                         val have = own.map { it.name }.toSet() + inheritedNames
@@ -146,6 +147,33 @@ fun VarsSection(
                             ).filter { it.name !in have },
                         )
                     })
+                    } else {
+                        DropdownMenuItem(text = { Text("Деньги: Сумма") }, onClick = {
+                            presets = false
+                            val have = own.map { it.name }.toSet() + inheritedNames
+                            onChange(own + listOf(VarDef("Сумма", "sum")).filter { it.name !in have })
+                        })
+                        DropdownMenuItem(text = { Text("Счётчик: показание и расход") }, onClick = {
+                            presets = false
+                            val have = own.map { it.name }.toSet() + inheritedNames
+                            onChange(
+                                own + listOf(
+                                    VarDef("Показание", "max"),
+                                    VarDef("Расход", "span", field = "Показание"),
+                                ).filter { it.name !in have },
+                            )
+                        })
+                        DropdownMenuItem(text = { Text("Остаток: приход, расход, остаток") }, onClick = {
+                            presets = false
+                            val have = own.map { it.name }.toSet() + inheritedNames
+                            onChange(
+                                own + listOf(
+                                    VarDef("Приход", "sum"),
+                                    VarDef("Расход", "sum"),
+                                    VarDef("Остаток", "balance", formula = "{Приход} - {Расход}"),
+                                ).filter { it.name !in have },
+                            )
+                        })
                 }
             }
         }
