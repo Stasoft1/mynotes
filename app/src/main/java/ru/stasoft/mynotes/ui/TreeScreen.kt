@@ -310,13 +310,6 @@ fun TreeScreen(vm: AppViewModel) {
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Планировщик (напоминания)") },
-                            onClick = {
-                                menuOpen = false
-                                vm.showReminders = true
-                            },
-                        )
-                        DropdownMenuItem(
                             text = { Text("Настройки") },
                             leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                             onClick = {
