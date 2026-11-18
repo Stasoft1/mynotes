@@ -85,7 +85,7 @@ fun FuelDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun LineChart(values: List<Double>) {
+internal fun LineChart(values: List<Double>) {
     val line = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
     val lo = values.min()

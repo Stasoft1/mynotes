@@ -629,6 +629,23 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Сводная таблица «месяц × услуга» по заметкам в поддереве папки [id]. */
+    suspend fun payTable(id: Long?): ru.stasoft.mynotes.data.PayTable {
+        val dao = dao() ?: return ru.stasoft.mynotes.data.PayTable(emptyList(), emptyList(), emptyList())
+        return withContext(Dispatchers.Default) {
+            val notes = ArrayList<Pair<String, String>>()
+            suspend fun walk(parent: Long?, depth: Int) {
+                for (n in dao.childrenOnce(parent)) {
+                    if (n.isFolder) { if (depth < 12) walk(n.id, depth + 1) }
+                    else notes.add(n.displayTitle() to n.body)
+                }
+            }
+            val root = id?.let { dao.get(it) }
+            if (root != null && !root.isFolder) notes.add(root.displayTitle() to root.body) else walk(id, 1)
+            ru.stasoft.mynotes.data.buildPayTable(notes)
+        }
+    }
+
     /** PDF заметки или всей папки [id] (null — текущая папка/вся база) и окно «Поделиться». */
     fun exportPdf(id: Long?) {
         val dao = dao() ?: return

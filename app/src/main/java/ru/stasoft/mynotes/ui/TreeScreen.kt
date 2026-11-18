@@ -206,6 +206,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showCheck by remember { mutableStateOf(false) }
     var showReport by remember { mutableStateOf(false) }
     var showFuel by remember { mutableStateOf(false) }
+    var showTable by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
     androidx.compose.runtime.LaunchedEffect(serviceStatus) { vm.checkService() }
@@ -307,6 +308,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 showFuel = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Таблица по папке…") },
+                            onClick = {
+                                menuOpen = false
+                                showTable = true
                             },
                         )
                         DropdownMenuItem(
@@ -614,6 +622,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showService) ServiceDialog(vm, onDismiss = { showService = false })
+    if (showTable) PayTableDialog(vm, vm.selectedId ?: folderId, onDismiss = { showTable = false })
     if (showFuel) FuelDialog(vm, folderId, onDismiss = { showFuel = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
     if (showBackup) BackupDialog(vm, onDismiss = { showBackup = false })
