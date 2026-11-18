@@ -16,6 +16,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ContentCopy
@@ -140,6 +143,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     var showTextColor by remember { mutableStateOf(false) }
     var showBgColor by remember { mutableStateOf(false) }
     var showSizes by remember { mutableStateOf(false) }
+    var tableDlg by remember { mutableStateOf<TableDraft?>(null) }
+    // Заметка с таблицами открывается в просмотре: текст, таблица, текст.
+    var preview by remember(note.id) { mutableStateOf(!note.checklist && ru.stasoft.mynotes.data.findTables(draft0?.body ?: note.body).isNotEmpty()) }
     val spansJson = spansToJson(spans)
     // Режим списка задач: пункты строятся из текущего текста при включении режима.
     val checklist = remember(note.id, note.checklist) { ChecklistState(bodyField.text) }
@@ -361,6 +367,31 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         }
     }
 
+    tableDlg?.let { d ->
+        TableEditDialog(
+            draft = d,
+            onDismiss = { tableDlg = null },
+            onSave = { rows ->
+                tableDlg = null
+                val t = bodyField.text
+                val ser = ru.stasoft.mynotes.data.serializeTable(rows)
+                if (d.insert) {
+                    val pos = d.start.coerceIn(0, t.length)
+                    val ins = (if (pos > 0 && t[pos - 1] != '\n') "\n" else "") + ser + (if (pos < t.length && t[pos] != '\n') "\n" else "")
+                    updateBody(TextFieldValue(t.substring(0, pos) + ins + t.substring(pos), androidx.compose.ui.text.TextRange(pos + ins.length)))
+                } else {
+                    updateBody(TextFieldValue(t.replaceRange(d.start, d.end, ser), androidx.compose.ui.text.TextRange(d.start + ser.length)))
+                }
+            },
+            onDelete = if (d.insert) null else ({
+                tableDlg = null
+                val t = bodyField.text
+                val to = if (d.end < t.length) d.end + 1 else d.end
+                updateBody(TextFieldValue(t.removeRange(d.start, to), androidx.compose.ui.text.TextRange(d.start)))
+            }),
+        )
+    }
+
     Scaffold(
         topBar = {
             TopStrip {
@@ -463,6 +494,16 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             }
             if (note.checklist) {
                 ChecklistBody(checklist, note.readOnly, Modifier.fillMaxWidth().weight(1f))
+            } else if (preview) {
+                val tbs = remember(body) { ru.stasoft.mynotes.data.findTables(body) }
+                NotePreview(
+                    text = body,
+                    spans = spans,
+                    tables = tbs,
+                    onTable = { b -> if (!note.readOnly) tableDlg = TableDraft(b.start, b.end, b.rows, false) },
+                    onEditText = { if (!note.readOnly) preview = false },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
             } else TextField(
                 value = bodyField,
                 onValueChange = { updateBody(it) },
@@ -500,7 +541,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceContainer),
             ) {
-                if (!titleFocused && !note.readOnly) {
+                if (!titleFocused && !note.readOnly && !preview) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                         FmtButton(Icons.Filled.FormatBold, "Жирный", isActive(SpanKind.BOLD)) { toggleStyle(SpanKind.BOLD) }
                         FmtButton(Icons.Filled.FormatItalic, "Курсив", isActive(SpanKind.ITALIC)) { toggleStyle(SpanKind.ITALIC) }
@@ -531,6 +572,16 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     }
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    ToolButton(Icons.Filled.TableChart, "Таблица") {
+                        if (note.readOnly) return@ToolButton
+                        val hit = if (titleFocused) null else ru.stasoft.mynotes.data.tableAt(bodyField.text, bodyField.selection.start)
+                        tableDlg = if (hit != null) TableDraft(hit.start, hit.end, hit.rows, false)
+                        else TableDraft(bodyField.selection.start, bodyField.selection.start, newTableRows(), true)
+                    }
+                    if (ru.stasoft.mynotes.data.findTables(body).isNotEmpty() || preview) ToolButton(
+                        if (preview) Icons.Filled.Edit else Icons.Filled.Visibility,
+                        if (preview) "Править текст" else "Просмотр",
+                    ) { preview = !preview }
                     ToolButton(Icons.AutoMirrored.Filled.Undo, "Отменить") {
                         history().undo(current())?.let { setCurrent(it) }
                     }

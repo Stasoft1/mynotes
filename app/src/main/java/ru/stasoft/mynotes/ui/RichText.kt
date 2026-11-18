@@ -43,7 +43,7 @@ val FONT_SIZES: List<Pair<String, Int?>> = listOf(
     "Заголовок" to 32,
 )
 
-private fun buildStyled(text: String, spans: List<Span>): AnnotatedString {
+internal fun buildStyled(text: String, spans: List<Span>): AnnotatedString {
     val len = text.length
     return AnnotatedString.Builder(text).apply {
         // Стили символов: режем текст по границам диапазонов и для каждого куска собираем итоговый стиль.
@@ -119,8 +119,13 @@ private fun buildStyled(text: String, spans: List<Span>): AnnotatedString {
 /** Показывает оформление поверх обычного текста поля, не меняя сам текст и положение курсора. */
 class SpanTransformation(private val spans: List<Span>) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        if (spans.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        return TransformedText(buildStyled(text.text, spans), OffsetMapping.Identity)
+        val tables = if (text.text.contains('|')) ru.stasoft.mynotes.data.findTables(text.text) else emptyList()
+        if (spans.isEmpty() && tables.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
+        val styled = buildStyled(text.text, spans)
+        if (tables.isEmpty()) return TransformedText(styled, OffsetMapping.Identity)
+        val b = AnnotatedString.Builder(styled)
+        tables.forEach { b.addStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, background = Color(0x2260A5FA)), it.start, minOf(it.end, text.text.length)) }
+        return TransformedText(b.toAnnotatedString(), OffsetMapping.Identity)
     }
 }
 

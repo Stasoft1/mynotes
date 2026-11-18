@@ -761,7 +761,7 @@ private fun NoteRow(
                 Text(
                     highlight(
                         (if (hl.isNotBlank()) searchSnippet(note.body, hl) else null)
-                            ?: note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
+                            ?: note.body.lineSequence().firstOrNull { it.isNotBlank() && !it.trimStart().startsWith("|") }.orEmpty(),
                         hl,
                     ),
                     style = MaterialTheme.typography.bodySmall,
