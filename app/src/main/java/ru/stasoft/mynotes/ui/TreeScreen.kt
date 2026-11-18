@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.ui.draw.shadow
@@ -256,7 +257,7 @@ fun TreeScreen(vm: AppViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopStrip {
+            if (vm.multi != null) MultiStrip(vm, items) else TopStrip {
                 if (folderId != null) StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { vm.goUp() }
                 StripButton(Icons.Filled.Add, "Создать заметку") { vm.newNote() }
                 StripButton(Icons.Filled.CreateNewFolder, "Создать папку") { vm.newChild() }
@@ -308,6 +309,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 showFuel = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Выбрать несколько") },
+                            onClick = {
+                                menuOpen = false
+                                vm.startMulti(vm.selectedId)
                             },
                         )
                         DropdownMenuItem(
@@ -396,6 +404,7 @@ fun TreeScreen(vm: AppViewModel) {
             today?.let { t ->
                 if (folderId == null && query.isBlank()) TodayCard(t, onOpen = { vm.openFolderById(t.folder.id) })
             }
+            MultiBar(vm)
             vm.clip?.let { c ->
                 Row(
                     Modifier
@@ -405,7 +414,7 @@ fun TreeScreen(vm: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        (if (c.move) "Перенос: " else "Копирование: ") + "«${c.title}»",
+                        (if (c.move) "Перенос: " else "Копирование: ") + (if (c.ids.size > 1 || c.title.startsWith("записей") || c.title == "1 запись") c.title else "«${c.title}»"),
                         modifier = Modifier.weight(1f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -487,7 +496,7 @@ fun TreeScreen(vm: AppViewModel) {
             var askManual by remember { mutableStateOf(false) }
             var suppressUntil by remember { mutableStateOf(0L) }
             val shown = order ?: items
-            LaunchedEffect(folderId) { order = null; dragId = null; dragDy = 0f }
+            LaunchedEffect(folderId) { order = null; dragId = null; dragDy = 0f; vm.endMulti() }
             LaunchedEffect(items) {
                 val o = order
                 if (o != null && dragId == null && o.map { it.id } == items.map { it.id }) order = null
@@ -566,7 +575,7 @@ fun TreeScreen(vm: AppViewModel) {
                                 shape = RoundedCornerShape(12.dp)
                             }
                     } else Modifier.animateItem())
-                    val dragMod = Modifier
+                    val dragMod = if (vm.multi != null) Modifier else Modifier
                         .pointerInput(note.id, canDrag) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
@@ -600,8 +609,8 @@ fun TreeScreen(vm: AppViewModel) {
                         zebra = index % 2 == 1,
                         number = numbers[note.id],
                         photos = photoCounts[note.id] ?: 0,
-                        selected = vm.selectedId == note.id,
-                        onClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) { if (note.isFolder) vm.openFolder(note) else vm.select(note) } },
+                        selected = if (vm.multi != null) vm.multi?.contains(note.id) == true else vm.selectedId == note.id,
+                        onClick = { if (vm.multi != null) vm.toggleMulti(note.id) else if (android.os.SystemClock.uptimeMillis() > suppressUntil) { if (note.isFolder) vm.openFolder(note) else vm.select(note) } },
                         onDoubleClick = { if (android.os.SystemClock.uptimeMillis() > suppressUntil) vm.editNote(note) },
                         onLongClick = null, // долгий тап обрабатывает жест перетаскивания
                         hl = query,
@@ -674,6 +683,7 @@ fun TreeScreen(vm: AppViewModel) {
             onDelete = { vm.delete(note) },
             onFlatten = { toRoot -> vm.flattenFolder(note, toRoot) },
             onClip = { move -> vm.startClip(note, move) },
+            onMulti = { vm.startMulti(note.id) },
             canReorder = query.isBlank() && vm.sortMode.value == 0,
             onEdge = { top -> vm.moveToEdge(note, top) },
         )
@@ -821,6 +831,7 @@ private fun ActionDialog(
     onDelete: () -> Unit,
     onFlatten: (toRoot: Boolean) -> Unit,
     onClip: (move: Boolean) -> Unit,
+    onMulti: () -> Unit,
     canReorder: Boolean,
     onEdge: (top: Boolean) -> Unit,
 ) {
@@ -869,6 +880,7 @@ private fun ActionDialog(
         text = {
             Column {
                 Item(Icons.Filled.Edit, "Переименовать") { mode = 1 }
+                Item(Icons.Filled.Checklist, "Выбрать несколько…") { onMulti(); onDismiss() }
                 Item(Icons.Filled.DriveFileMove, "Переместить в другую папку…") { onClip(true); onDismiss() }
                 Item(Icons.Filled.ContentCopy, if (note.isFolder) "Копировать со всем содержимым…" else "Копировать…") { onClip(false); onDismiss() }
                 if (canReorder) {

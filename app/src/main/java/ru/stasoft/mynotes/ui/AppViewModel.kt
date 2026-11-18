@@ -1571,21 +1571,65 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- копирование и перенос ----------
 
-    /** Запись, выбранная для переноса или копирования; вставляется кнопкой «Вставить сюда». */
-    data class Clip(val id: Long, val title: String, val move: Boolean)
+    /** Записи, выбранные для переноса или копирования; вставляются кнопкой «Вставить сюда». */
+    data class Clip(val ids: List<Long>, val title: String, val move: Boolean)
 
     var clip by mutableStateOf<Clip?>(null)
         private set
 
     fun startClip(note: NoteEntity, move: Boolean) {
-        clip = Clip(note.id, note.title.ifBlank { note.body.lineSequence().firstOrNull().orEmpty().take(40) }.ifBlank { "Без названия" }, move)
+        clip = Clip(listOf(note.id), note.title.ifBlank { note.body.lineSequence().firstOrNull().orEmpty().take(40) }.ifBlank { "Без названия" }, move)
+    }
+
+    /** Перенос или копирование сразу нескольких выбранных записей. */
+    fun startClipMulti(ids: List<Long>, move: Boolean) {
+        if (ids.isEmpty()) return
+        clip = Clip(ids, if (ids.size == 1) "1 запись" else "записей: ${ids.size}", move)
+        multi = null
     }
 
     fun cancelClip() {
         clip = null
     }
 
-    /** Вставляет выбранную запись (папку — со всем содержимым) в открытую сейчас папку. */
+    // ---------- групповой выбор ----------
+
+    /** Выбранные записи в режиме группового выбора; null — режим выключен. */
+    var multi by mutableStateOf<Set<Long>?>(null)
+
+    fun startMulti(id: Long?) { multi = if (id == null) linkedSetOf() else linkedSetOf(id) }
+    fun toggleMulti(id: Long) {
+        val m = multi ?: return
+        multi = LinkedHashSet(m).apply { if (!add(id)) remove(id) }
+    }
+    fun selectAllMulti(ids: List<Long>) { multi = LinkedHashSet(ids) }
+    fun endMulti() { multi = null }
+
+    fun deleteMulti() {
+        val ids = multi ?: return
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            ids.forEach { id -> dao.get(id)?.let { dao.delete(it) } }
+            message = "Удалено записей: ${ids.size}"
+            multi = null
+        }
+    }
+
+    /** Меняет оформление (цвета, значок) у всех выбранных записей. */
+    fun styleMulti(change: (NoteEntity) -> NoteEntity) {
+        val ids = multi ?: return
+        val db = dbFlow.value ?: return
+        viewModelScope.launch {
+            val dao = db.notes()
+            val now = System.currentTimeMillis()
+            db.withTransaction {
+                ids.forEach { id -> dao.get(id)?.let { dao.update(change(it).copy(updatedAt = now)) } }
+            }
+            message = "Изменено записей: ${ids.size}"
+        }
+    }
+
+    /** Вставляет выбранные записи (папки — со всем содержимым) в открытую сейчас папку. */
     fun pasteHere() {
         val c = clip ?: return
         val db = dbFlow.value ?: return
@@ -1593,37 +1637,41 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val dao = db.notes()
+                val ancestors = HashSet<Long>()
                 var cur = target
                 while (cur != null) {
-                    if (cur == c.id) {
-                        message = "Нельзя вставить папку внутрь самой себя"
-                        return@launch
-                    }
+                    ancestors.add(cur)
                     cur = dao.get(cur)?.parentId
                 }
-                val src = dao.get(c.id)
-                if (src == null) {
+                val srcs = c.ids.mapNotNull { dao.get(it) }
+                if (srcs.isEmpty()) {
                     message = "Исходная запись не найдена"
                     clip = null
                     return@launch
                 }
-                var resultId = src.id
+                if (srcs.any { it.id in ancestors }) {
+                    message = "Нельзя вставить папку внутрь самой себя"
+                    return@launch
+                }
+                var lastId = srcs.last().id
                 if (c.move) {
-                    if (src.parentId == target) {
-                        message = "Запись уже лежит в этой папке"
+                    val moving = srcs.filter { it.parentId != target }
+                    if (moving.isEmpty()) {
+                        message = "Записи уже лежат в этой папке"
                         clip = null
                         return@launch
                     }
                     db.withTransaction {
-                        dao.update(src.copy(parentId = target, sortIndex = dao.maxSort(target) + 1))
+                        var pos = dao.maxSort(target) + 1
+                        moving.forEach { dao.update(it.copy(parentId = target, sortIndex = pos++)) }
                         target?.let { t -> dao.get(t)?.let { if (!it.isFolder) dao.update(it.copy(isFolder = true)) } }
                     }
-                    message = "Перемещено"
+                    message = if (moving.size == 1) "Перемещено" else "Перемещено записей: ${moving.size}"
+                    lastId = moving.last().id
                 } else {
                     val snippets = allSnippets.value
-                    val sameParent = src.parentId == target
                     var count = 0
-                    suspend fun copyTree(n: NoteEntity, parent: Long?, pos: Int, top: Boolean): Long {
+                    suspend fun copyTree(n: NoteEntity, parent: Long?, pos: Int, top: Boolean, sameParent: Boolean): Long {
                         val kids = if (n.isFolder) dao.children(n.id).first() else emptyList()
                         val id = dao.insert(
                             n.copy(
@@ -1639,17 +1687,18 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                         )
                         count++
                         snippets.filter { it.folderId == n.id }.forEach { dao.insertSnippet(it.copy(id = 0, folderId = id)) }
-                        kids.forEachIndexed { i, k -> copyTree(k, id, i, false) }
+                        kids.forEachIndexed { i, k -> copyTree(k, id, i, false, false) }
                         return id
                     }
                     db.withTransaction {
-                        resultId = copyTree(src, target, dao.maxSort(target) + 1, true)
+                        var pos = dao.maxSort(target) + 1
+                        srcs.forEach { lastId = copyTree(it, target, pos++, true, it.parentId == target) }
                         target?.let { t -> dao.get(t)?.let { if (!it.isFolder) dao.update(it.copy(isFolder = true)) } }
                     }
                     message = "Скопировано записей: $count"
                 }
                 clip = null
-                selectedId = resultId
+                selectedId = lastId
                 scrollTick++
             } catch (e: Exception) {
                 message = "Не получилось: ${e.message}"

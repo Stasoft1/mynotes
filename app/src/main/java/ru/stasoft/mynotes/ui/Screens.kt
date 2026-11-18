@@ -79,7 +79,7 @@ import ru.stasoft.mynotes.data.displayTitle
 
 @Composable
 fun AppRoot(vm: AppViewModel) {
-    BackHandler(enabled = vm.unlocked) { vm.goUp() }
+    BackHandler(enabled = vm.unlocked) { if (vm.multi != null) vm.endMulti() else vm.goUp() }
     val appCtx = LocalContext.current
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(vm.unlocked) {
