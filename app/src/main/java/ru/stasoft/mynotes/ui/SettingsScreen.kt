@@ -12,6 +12,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FactCheck
@@ -33,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
+private val MODS = ru.stasoft.mynotes.modules.Modules
+
 /** Технические пункты: внешний вид, безопасность, данные, версия. */
 @Composable
 fun SettingsDialog(
@@ -49,16 +59,40 @@ fun SettingsDialog(
     val version = remember(ctx) {
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    var page by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    Dialog(onDismissRequest = { if (page != null) page = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                val pageTitles = mapOf(
+                    "look" to "Внешний вид", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
+                    "modules" to "Модули", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.IconButton(onClick = onDismiss) {
+                    androidx.compose.material3.IconButton(onClick = { if (page != null) page = null else onDismiss() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
-                    Text("Настройки", style = MaterialTheme.typography.titleLarge)
+                    Text(pageTitles[page] ?: "Настройки", style = MaterialTheme.typography.titleLarge)
                 }
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    when (page) {
+                        null -> {
+                            SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема и стиль кнопок") { page = "look" }
+                            SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Вход по отпечатку") { page = "security" }
+                            SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
+                            SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
+                            SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
+                            if (MODS.on("auto") || MODS.on("day") || MODS.on("giga") || MODS.on("route")) {
+                                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                                SettingsTitle("Настройки модулей")
+                                if (MODS.on("auto")) SettingsAction(Icons.Filled.DirectionsCar, "Авто", "Машины, регламент ТО, привязка заметок") { page = "auto" }
+                                if (MODS.on("day")) SettingsAction(Icons.Filled.CalendarMonth, "Папка дня", "График и шаблоны для нового дня") { page = "day" }
+                                if (MODS.on("giga")) SettingsAction(Icons.Filled.Mic, "Голосовой ввод", "Ключ GigaChat для ИИ-разбора") { page = "giga" }
+                                if (MODS.on("route")) SettingsAction(Icons.Filled.Directions, "Маршрут", "Город для адресов без города") { page = "route" }
+                            }
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                            SettingsAction(Icons.Filled.Info, "О программе", "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "") { page = "about" }
+                        }
+                        "look" -> {
                     SettingsTitle("Внешний вид")
                     listOf(0 to "Как в системе", 1 to "Светлая", 2 to "Тёмная").forEach { (mode, label) ->
                         Row(
@@ -83,7 +117,8 @@ fun SettingsDialog(
                         onClick = { showKit = true },
                         modifier = Modifier.padding(horizontal = 8.dp),
                     ) { Text("Посмотреть стеклянный набор…") }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                        }
+                        "security" -> {
                     SettingsTitle("Безопасность")
                     if (vm.biometricAvailable()) {
                         Row(
@@ -113,38 +148,32 @@ fun SettingsDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                        }
+                        "data" -> {
                     SettingsTitle("Данные")
                     SettingsAction(Icons.Filled.Backup, "Резервные копии…", "Расписание, папка (Google Диск), восстановление", onBackup)
                     SettingsAction(Icons.Filled.FileUpload, "Импорт из .mtnt", "Загрузить базу MyTreeNotes в корень", onImport)
                     SettingsAction(Icons.Filled.FactCheck, "Проверка показаний…", "Найти ошибки в пробеге и других показаниях", onCheck)
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    ModulesSection(vm)
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    FieldListsSection(vm)
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    if (ru.stasoft.mynotes.modules.Modules.on("auto")) {
-                        AutoSettingsSection(vm)
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                        }
+                        "lists" -> FieldListsSection(vm)
+                        "modules" -> ModulesSection(vm)
+                        "auto" -> AutoSettingsSection(vm)
+                        "day" -> AutoDaySettingsSection(vm)
+                        "giga" -> VoiceSettingsSection(vm)
+                        "route" -> RouteSettingsSection()
+                        "about" -> {
+                            Text(
+                                "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                            Text(
+                                "Записная книжка с шифрованием, шаблонами, переменными и напоминаниями. Все данные хранятся только на вашем телефоне.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
                     }
-                    if (ru.stasoft.mynotes.modules.Modules.on("day")) {
-                        AutoDaySettingsSection(vm)
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    }
-                    if (ru.stasoft.mynotes.modules.Modules.on("giga")) {
-                        VoiceSettingsSection(vm)
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    }
-                    if (ru.stasoft.mynotes.modules.Modules.on("route")) {
-                        RouteSettingsSection()
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    SettingsTitle("О программе")
-                    Text(
-                        "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
                 }
             }
         }
