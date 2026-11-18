@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Directions
@@ -64,7 +65,7 @@ fun SettingsDialog(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
-                    "look" to "Внешний вид", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
+                    "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
                     "modules" to "Модули", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -77,6 +78,7 @@ fun SettingsDialog(
                     when (page) {
                         null -> {
                             SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема и стиль кнопок") { page = "look" }
+                            SettingsAction(Icons.Filled.Apps, "Значок приложения", "Восемь вариантов значка") { page = "icon" }
                             SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Вход по отпечатку") { page = "security" }
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
@@ -155,6 +157,7 @@ fun SettingsDialog(
                     SettingsAction(Icons.Filled.FileUpload, "Импорт из .mtnt", "Загрузить базу MyTreeNotes в корень", onImport)
                     SettingsAction(Icons.Filled.FactCheck, "Проверка показаний…", "Найти ошибки в пробеге и других показаниях", onCheck)
                         }
+                        "icon" -> IconSettingsSection()
                         "lists" -> FieldListsSection(vm)
                         "modules" -> ModulesSection(vm)
                         "auto" -> AutoSettingsSection(vm)
@@ -172,6 +175,15 @@ fun SettingsDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
+                            val aboutCtx = LocalContext.current
+                            SettingsAction(Icons.Filled.Info, "Связь с автором", "Telegram: @Stasoft") {
+                                runCatching {
+                                    aboutCtx.startActivity(
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/Stasoft"))
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
