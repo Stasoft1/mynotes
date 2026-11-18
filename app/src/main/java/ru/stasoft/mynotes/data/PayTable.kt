@@ -37,7 +37,8 @@ fun parsePayNote(body: String): Pair<Map<Pair<Int, Int>, Double>, List<String>> 
     for (raw in body.lines()) {
         val line = raw.trim()
         if (line.isEmpty() || line.all { it == '-' || it == '—' || it == '_' || it == '=' }) continue
-        YEAR_LINE.matchEntire(line)?.let { year = it.groupValues[1].toInt(); return@let }?.let { continue }
+        val ym = YEAR_LINE.matchEntire(line)
+        if (ym != null) { year = ym.groupValues[1].toInt(); continue }
         val m = MONTH_LINE.matchEntire(line)
         if (m == null) { if (line.any { it.isDigit() }) bad.add(line); continue }
         val name = m.groupValues[1].lowercase()
