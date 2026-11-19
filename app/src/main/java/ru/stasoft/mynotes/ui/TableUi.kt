@@ -53,9 +53,9 @@ private fun fmt(v: Double): String =
     if (v == Math.floor(v) && Math.abs(v) < 1e12) String.format(java.util.Locale("ru"), "%,.0f", v).replace(' ', ' ')
     else String.format(java.util.Locale("ru"), "%,.2f", v).replace(' ', ' ')
 
-private fun colWidth(rows: List<List<String>>, c: Int): Dp {
-    val len = rows.maxOf { it.getOrElse(c) { "" }.length }
-    return (len * 8 + 28).coerceIn(64, 200).dp
+private fun colWidth(rows: List<List<String>>, c: Int, sum: Double? = null): Dp {
+    val len = maxOf(rows.maxOf { it.getOrElse(c) { "" }.length }, sum?.let { fmt(it).length } ?: 0, if (c == 0 && sum == null) 5 else 0)
+    return (len * 9 + 28).coerceIn(64, 220).dp
 }
 
 /** Таблица для просмотра: шапка, строки и (если есть числовые столбцы) строка итогов. */
@@ -65,7 +65,7 @@ fun TableGrid(rows: List<List<String>>, modifier: Modifier = Modifier, onClick: 
     val line = MaterialTheme.colorScheme.outlineVariant
     val sums = remember(rows) { tableSums(rows) }
     val hasSums = sums.any { it != null }
-    val widths = remember(rows) { rows[0].indices.map { colWidth(rows, it) } }
+    val widths = remember(rows) { rows[0].indices.map { colWidth(rows, it, sums.getOrNull(it)) } }
     val nums = remember(rows) { sums.map { it != null } }
     Column(
         modifier.horizontalScroll(rememberScrollState()).border(1.dp, line).let { if (onClick != null) it.clickable(onClick = onClick) else it },
@@ -77,6 +77,8 @@ fun TableGrid(rows: List<List<String>>, modifier: Modifier = Modifier, onClick: 
                         cell,
                         Modifier.width(widths[ci]).padding(horizontal = 8.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        softWrap = false,
                         fontWeight = if (ri == 0) FontWeight.Bold else null,
                         textAlign = if (ri > 0 && nums.getOrElse(ci) { false }) TextAlign.End else TextAlign.Start,
                     )
@@ -90,6 +92,8 @@ fun TableGrid(rows: List<List<String>>, modifier: Modifier = Modifier, onClick: 
                     v?.let { fmt(it) } ?: if (ci == 0) "Итого" else "",
                     Modifier.width(widths[ci]).padding(horizontal = 8.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    softWrap = false,
                     fontWeight = FontWeight.Bold,
                     textAlign = if (v != null) TextAlign.End else TextAlign.Start,
                 )
