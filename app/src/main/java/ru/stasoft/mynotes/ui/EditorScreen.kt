@@ -371,10 +371,10 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         TableEditDialog(
             draft = d,
             onDismiss = { tableDlg = null },
-            onSave = { rows ->
+            onSave = { rows, aligns ->
                 tableDlg = null
                 val t = bodyField.text
-                val ser = ru.stasoft.mynotes.data.serializeTable(rows)
+                val ser = ru.stasoft.mynotes.data.serializeTable(rows, aligns)
                 if (d.insert) {
                     val pos = d.start.coerceIn(0, t.length)
                     val ins = (if (pos > 0 && t[pos - 1] != '\n') "\n" else "") + ser + (if (pos < t.length && t[pos] != '\n') "\n" else "")
@@ -500,7 +500,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     text = body,
                     spans = spans,
                     tables = tbs,
-                    onTable = { b -> if (!note.readOnly) tableDlg = TableDraft(b.start, b.end, b.rows, false) },
+                    onTable = { b -> if (!note.readOnly) tableDlg = TableDraft(b.start, b.end, b.rows, false, b.aligns) },
                     onEditText = { if (!note.readOnly) preview = false },
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
@@ -575,7 +575,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     ToolButton(Icons.Filled.TableChart, "Таблица") {
                         if (note.readOnly) return@ToolButton
                         val hit = if (titleFocused) null else ru.stasoft.mynotes.data.tableAt(bodyField.text, bodyField.selection.start)
-                        tableDlg = if (hit != null) TableDraft(hit.start, hit.end, hit.rows, false)
+                        tableDlg = if (hit != null) TableDraft(hit.start, hit.end, hit.rows, false, hit.aligns)
                         else TableDraft(bodyField.selection.start, bodyField.selection.start, newTableRows(), true)
                     }
                     if (ru.stasoft.mynotes.data.findTables(body).isNotEmpty() || preview) ToolButton(
