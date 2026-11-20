@@ -249,6 +249,8 @@ fun TableEditDialog(draft: TableDraft, onDismiss: () -> Unit, onSave: (List<List
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Закрыть") }
                     Text(if (draft.insert) "Новая таблица" else "Таблица", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    TextButton(onClick = { CsvExport.share(ctx, "Таблица", cells.map { r -> r.map { it.text } }) }) { Text("CSV") }
                     if (onDelete != null) TextButton(onClick = onDelete) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
                     TextButton(onClick = { onSave(cells.map { r -> r.map { encodeCell(it.st, it.text) } }, aligns) }) { Text("Готово") }
                 }

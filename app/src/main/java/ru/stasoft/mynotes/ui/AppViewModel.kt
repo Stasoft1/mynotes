@@ -657,6 +657,20 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 fun bodyOf(n: NoteEntity): String =
                     if (n.checklist) n.body.split("\n").joinToString("\n") { if (it.startsWith("[x] ") || it.startsWith("[X] ")) "☑ " + it.drop(4) else "☐ $it" }
                     else n.body
+                // Текст заметки идёт блоками; таблицы внутри текста выводятся настоящими таблицами.
+                fun addBody(n: NoteEntity) {
+                    if (n.body.isBlank()) return
+                    val tbs = if (n.checklist) emptyList() else ru.stasoft.mynotes.data.findTables(n.body)
+                    if (tbs.isEmpty()) { blocks.add(ru.stasoft.mynotes.ui.PdfBlock(bodyOf(n), 0)); return }
+                    var pos = 0
+                    tbs.forEach { t ->
+                        val to = maxOf(pos, t.start - 1)
+                        n.body.substring(pos, to).trim('\n').takeIf { it.isNotBlank() }?.let { blocks.add(ru.stasoft.mynotes.ui.PdfBlock(it, 0)) }
+                        blocks.add(ru.stasoft.mynotes.ui.PdfBlock("", 0, ru.stasoft.mynotes.ui.PdfTable(t.rows, t.aligns)))
+                        pos = minOf(n.body.length, t.end + 1)
+                    }
+                    if (pos < n.body.length) n.body.substring(pos).trim('\n').takeIf { it.isNotBlank() }?.let { blocks.add(ru.stasoft.mynotes.ui.PdfBlock(it, 0)) }
+                }
                 suspend fun walk(parent: Long?, level: Int) {
                     for (n in dao.childrenOnce(parent)) {
                         if (n.isFolder) {
@@ -665,7 +679,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                             if (level < 12) walk(n.id, level + 1)
                         } else {
                             blocks.add(ru.stasoft.mynotes.ui.PdfBlock(titleOf(n), 2))
-                            if (n.body.isNotBlank()) blocks.add(ru.stasoft.mynotes.ui.PdfBlock(bodyOf(n), 0))
+                            addBody(n)
                         }
                     }
                 }
@@ -682,7 +696,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 } else {
                     name = titleOf(root)
                     blocks.add(ru.stasoft.mynotes.ui.PdfBlock(name, 1))
-                    if (root.body.isNotBlank()) blocks.add(ru.stasoft.mynotes.ui.PdfBlock(bodyOf(root), 0))
+                    addBody(root)
                 }
                 if (blocks.isEmpty()) { message = "Нечего экспортировать"; return@launch }
                 val f = withContext(Dispatchers.Default) { ru.stasoft.mynotes.ui.PdfExport.write(app, name, blocks) }

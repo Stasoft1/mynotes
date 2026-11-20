@@ -53,7 +53,18 @@ fun PayTableDialog(vm: AppViewModel, folderId: Long?, onDismiss: () -> Unit) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
-                    Text("Таблица по папке", style = MaterialTheme.typography.titleLarge)
+                    Text("Таблица по папке", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    val csvCtx = androidx.compose.ui.platform.LocalContext.current
+                    table?.takeIf { it.cols.isNotEmpty() }?.let { tt ->
+                        androidx.compose.material3.TextButton(onClick = {
+                            val head = listOf("Год", "Месяц") + tt.cols + "Итого"
+                            fun n(v: Double) = String.format(java.util.Locale.US, "%.2f", v).replace('.', ',')
+                            val body = tt.rows.filter { year == null || it.year == year }.map { r ->
+                                listOf(r.year.toString(), MONTH_NAMES[r.month - 1]) + tt.cols.map { c -> r.values[c]?.let(::n) ?: "" } + n(r.total)
+                            }
+                            CsvExport.share(csvCtx, "Таблица по папке", listOf(head) + body)
+                        }) { Text("CSV") }
+                    }
                 }
                 val t = table
                 if (t == null) Text("Считаю…", Modifier.padding(16.dp))
