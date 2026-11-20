@@ -8,13 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class, CarEntity::class, ServiceItemEntity::class], version = 13, exportSchema = false)
+@Database(entities = [NoteEntity::class, SnippetEntity::class, PlaceEntity::class, PhotoEntity::class, CarEntity::class, ServiceItemEntity::class], version = 14, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun notes(): NoteDao
 
     companion object {
         /** Версия схемы (для проверки копий). */
-        const val VERSION = 13
+        const val VERSION = 14
 
         /** Последняя открытая база: нужна резервным копиям, чтобы сбросить журнал перед копированием. */
         @Volatile
@@ -116,6 +116,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoOn INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoFrom INTEGER NOT NULL DEFAULT -1")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoTo INTEGER NOT NULL DEFAULT -1")
+                db.execSQL("ALTER TABLE notes ADD COLUMN geoDays INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         private val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -134,7 +143,7 @@ abstract class AppDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(key.copyOf())
             return Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .build()
                 .also { current = it }
         }

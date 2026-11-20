@@ -640,9 +640,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         GeoDialog(
             note = note,
             onDismiss = { showGeoDialog = false },
-            onSave = { la, lo, r, lb, once ->
+            onSave = { la, lo, r, lb, once, cond ->
                 showGeoDialog = false
-                vm.setGeo(note.id, la, lo, r, lb, once)
+                vm.setGeo(note.id, la, lo, r, lb, once, cond)
             },
             onClear = {
                 showGeoDialog = false

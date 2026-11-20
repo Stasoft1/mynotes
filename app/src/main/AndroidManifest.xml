@@ -142,6 +142,9 @@
             android:name=".reminders.GeofenceReceiver"
             android:exported="false" />
         <receiver
+            android:name=".reminders.GeoWindowReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".reminders.BootReceiver"
             android:exported="true">
             <intent-filter>

@@ -323,7 +323,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Напоминание по месту: точка на карте (lat == null — убрать). */
-    fun setGeo(noteId: Long, lat: Double?, lon: Double?, radius: Int, label: String, once: Boolean) {
+    fun setGeo(noteId: Long, lat: Double?, lon: Double?, radius: Int, label: String, once: Boolean, cond: GeoCond = GeoCond()) {
         val dao = dao() ?: return
         viewModelScope.launch {
             val cur = dao.get(noteId) ?: return@launch
@@ -331,7 +331,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 cur.copy(
                     geoLat = lat, geoLon = if (lat == null) null else lon,
                     geoRadius = if (lat == null) 0 else radius, geoLabel = if (lat == null) "" else label,
-                    geoOnce = once, updatedAt = System.currentTimeMillis(),
+                    geoOnce = once, geoOn = cond.on, geoFrom = cond.from, geoTo = cond.to, geoDays = cond.days, updatedAt = System.currentTimeMillis(),
                 ),
             )
             if (editing?.id == noteId) editing = dao.get(noteId)

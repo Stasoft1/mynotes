@@ -109,7 +109,7 @@ object ReminderNotifier {
             .setContentTitle(e.title.ifBlank { "Напоминание" })
             .setContentText(
                 if (e.items.isNotEmpty()) e.items.joinToString(", ")
-                else if (e.label.isNotBlank()) "Вы рядом: ${e.label}" else "Вы пришли на место",
+                else if (e.label.isNotBlank()) (if (e.on == 1) "Вы ушли: " else "Вы рядом: ") + e.label else if (e.on == 1) "Вы покинули место" else "Вы пришли на место",
             )
             .apply {
                 if (e.items.isNotEmpty()) setStyle(

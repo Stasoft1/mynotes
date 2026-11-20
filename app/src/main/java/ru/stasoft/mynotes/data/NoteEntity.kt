@@ -72,4 +72,11 @@ data class NoteEntity(
     val geoRadius: Int = 0,
     val geoLabel: String = "",
     val geoOnce: Boolean = true,
+    /** Когда срабатывать: 0 — при приходе, 1 — при уходе из зоны. */
+    val geoOn: Int = 0,
+    /** Временное окно в минутах от полуночи; -1 — граница не задана. */
+    val geoFrom: Int = -1,
+    val geoTo: Int = -1,
+    /** Дни недели битами (пн = 1 … вс = 64); 0 — каждый день. */
+    val geoDays: Int = 0,
 )

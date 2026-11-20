@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.rememberScrollState
@@ -115,6 +116,9 @@ private suspend fun searchPlaces(q: String, cLat: Double, cLon: Double): List<Fo
     }.sortedBy { it.km }.take(8)
 }
 
+/** Условия срабатывания по месту: приход или уход, временное окно, дни недели. */
+data class GeoCond(val on: Int = 0, val from: Int = -1, val to: Int = -1, val days: Int = 0)
+
 /** Строка в заметке: где сработает напоминание. */
 @Composable
 fun GeoRow(note: NoteEntity, onEdit: () -> Unit) {
@@ -126,7 +130,8 @@ fun GeoRow(note: NoteEntity, onEdit: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                "Напомнить рядом, радиус ${note.geoRadius} м · " + if (note.geoOnce) "один раз" else "каждый раз",
+                "Радиус ${note.geoRadius} м · " + (if (note.geoOnce) "один раз" else "каждый раз") + " · " +
+                    ru.stasoft.mynotes.reminders.GeoWindow.summary(note.geoOn, note.geoFrom, note.geoTo, note.geoDays),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -140,7 +145,7 @@ fun GeoRow(note: NoteEntity, onEdit: () -> Unit) {
 fun GeoDialog(
     note: NoteEntity,
     onDismiss: () -> Unit,
-    onSave: (lat: Double, lon: Double, radius: Int, label: String, once: Boolean) -> Unit,
+    onSave: (lat: Double, lon: Double, radius: Int, label: String, once: Boolean, cond: GeoCond) -> Unit,
     onClear: () -> Unit,
     places: List<PlaceEntity>,
     onSavePlace: (name: String, lat: Double, lon: Double, radius: Int) -> Unit,
@@ -153,6 +158,8 @@ fun GeoDialog(
     var radius by remember { mutableIntStateOf(if (note.geoRadius > 0) note.geoRadius else 200) }
     var label by remember { mutableStateOf(note.geoLabel) }
     var once by remember { mutableStateOf(note.geoOnce) }
+    var cond by remember { mutableStateOf(GeoCond(note.geoOn, note.geoFrom, note.geoTo, note.geoDays)) }
+    var showCond by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<FoundPlace>>(emptyList()) }
     var status by remember { mutableStateOf("") }
@@ -225,7 +232,7 @@ fun GeoDialog(
                     if (note.geoLat != null) TextButton(onClick = onClear) { Text("Снять") }
                     TextButton(
                         enabled = lat != null,
-                        onClick = { onSave(lat!!, lon!!, radius, label.trim(), once) },
+                        onClick = { onSave(lat!!, lon!!, radius, label.trim(), once, cond) },
                     ) { Text("Сохранить") }
                 }
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -368,6 +375,14 @@ fun GeoDialog(
                             valueRange = 100f..1000f, modifier = Modifier.weight(1f),
                         )
                     }
+                    Row(Modifier.fillMaxWidth().clickable { showCond = true }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Когда: ", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            ru.stasoft.mynotes.reminders.GeoWindow.summary(cond.on, cond.from, cond.to, cond.days),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { showCond = true }) { Text("Настроить") }
+                    }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Row(Modifier.clickable { once = !once }, verticalAlignment = Alignment.CenterVertically) {
                             AppCheckbox(checked = once, onCheckedChange = { once = it })
@@ -390,6 +405,7 @@ fun GeoDialog(
             }
         }
     }
+    if (showCond) GeoCondDialog(cond, onDismiss = { showCond = false }, onOk = { cond = it; showCond = false })
     if (savePlaceDlg) {
         AlertDialog(
             onDismissRequest = { savePlaceDlg = false },
@@ -414,4 +430,61 @@ fun GeoDialog(
             dismissButton = { TextButton(onClick = { savePlaceDlg = false }) { Text("Отмена") } },
         )
     }
+}
+
+
+/** Окно «Когда»: приход или уход, временное окно «с — до» и дни недели. */
+@Composable
+private fun GeoCondDialog(start: GeoCond, onDismiss: () -> Unit, onOk: (GeoCond) -> Unit) {
+    val ctx = LocalContext.current
+    var c by remember { mutableStateOf(start) }
+    fun pick(cur: Int, def: Int, set: (Int) -> Unit) {
+        val v = if (cur >= 0) cur else def
+        android.app.TimePickerDialog(ctx, { _, h, m -> set(h * 60 + m) }, v / 60, v % 60, true).show()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Когда напомнить") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = c.on == 0, onClick = { c = c.copy(on = 0) }, label = { Text("Когда приду") })
+                    FilterChip(selected = c.on == 1, onClick = { c = c.copy(on = 1) }, label = { Text("Когда уйду") })
+                }
+                Text("Время (необязательно)", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { pick(c.from, 18 * 60) { c = c.copy(from = it) } }) {
+                        Text(if (c.from >= 0) "с " + ru.stasoft.mynotes.reminders.GeoWindow.hhmm(c.from) else "с …")
+                    }
+                    OutlinedButton(onClick = { pick(c.to, 21 * 60) { c = c.copy(to = it) } }) {
+                        Text(if (c.to >= 0) "до " + ru.stasoft.mynotes.reminders.GeoWindow.hhmm(c.to) else "до …")
+                    }
+                    if (c.from >= 0 || c.to >= 0) TextButton(onClick = { c = c.copy(from = -1, to = -1) }) { Text("Сбросить") }
+                }
+                Text("Дни недели (пусто — каждый день)", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEachIndexed { i, n ->
+                        FilterChip(
+                            selected = (c.days shr i) and 1 == 1,
+                            onClick = { c = c.copy(days = c.days xor (1 shl i)) },
+                            label = { Text(n) },
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { c = c.copy(days = 31) }) { Text("Будни") }
+                    TextButton(onClick = { c = c.copy(days = 96) }) { Text("Выходные") }
+                    TextButton(onClick = { c = c.copy(days = 0) }) { Text("Все") }
+                }
+                Text(
+                    ru.stasoft.mynotes.reminders.GeoWindow.summary(c.on, c.from, c.to, c.days) +
+                        if (c.on == 0 && (c.from >= 0 || c.to >= 0)) ".\nЕсли вы придёте раньше и останетесь в зоне, уведомление придёт в начале окна." else ".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onOk(c) }) { Text("Готово") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
