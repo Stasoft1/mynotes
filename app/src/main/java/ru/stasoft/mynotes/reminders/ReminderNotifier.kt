@@ -93,6 +93,29 @@ object ReminderNotifier {
         }
     }
 
+    fun showText(ctx: Context, title: String, text: String, id: Int) {
+        ensureChannel(ctx)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle(title)
+            .setContentText(text.lineSequence().first())
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            nm.notify(id, n)
+        } catch (_: SecurityException) {
+        }
+    }
+
     fun showBudget(ctx: Context, text: String) {
         ensureChannel(ctx)
         val open = PendingIntent.getActivity(

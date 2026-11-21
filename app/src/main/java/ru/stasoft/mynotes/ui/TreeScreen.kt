@@ -210,6 +210,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showTable by remember { mutableStateOf(false) }
     var showBudget by remember { mutableStateOf(false) }
     var showHealth by remember { mutableStateOf(false) }
+    var showDates by remember { mutableStateOf(false) }
     var showHabits by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
@@ -245,7 +246,7 @@ fun TreeScreen(vm: AppViewModel) {
     // Новый день: при возвращении в приложение создаём папку сегодняшнего дня, если включено.
     val dayOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(dayOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.ensureToday(); vm.checkService(); vm.checkBudget() } }
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.ensureToday(); vm.checkService(); vm.checkBudget(); vm.checkDates() } }
         dayOwner.lifecycle.addObserver(obs)
         onDispose { dayOwner.lifecycle.removeObserver(obs) }
     }
@@ -319,6 +320,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 vm.startMulti(vm.selectedId)
+                            },
+                        )
+                        if (vm.dateKindsOn().isNotEmpty()) DropdownMenuItem(
+                            text = { Text("Сроки и даты…") },
+                            onClick = {
+                                menuOpen = false
+                                showDates = true
                             },
                         )
                         if (ru.stasoft.mynotes.modules.Modules.on("health")) DropdownMenuItem(
@@ -655,6 +663,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showService) ServiceDialog(vm, onDismiss = { showService = false })
+    if (showDates) DatesDialog(vm, onDismiss = { showDates = false })
     if (showHealth) HealthDialog(vm, onDismiss = { showHealth = false })
     if (showHabits) HabitsDialog(vm, onDismiss = { showHabits = false })
     if (showBudget) BudgetDialog(vm, onDismiss = { showBudget = false })

@@ -897,6 +897,43 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         else -> emptyList()
     }
 
+    // ---------- сроки и даты ----------
+
+    private val dateKinds = listOf("subs", "bday", "warr", "debt")
+
+    fun dateKindsOn(): Set<String> = dateKinds.filter { Modules.on(it) }.toSet()
+
+    suspend fun dueItems(): List<ru.stasoft.mynotes.data.DueItem> {
+        val on = dateKindsOn()
+        if (on.isEmpty()) return emptyList()
+        val notes = allNotesOnce()
+        return withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.parseDueItems(notes, java.time.LocalDate.now(), on) }
+    }
+
+    /** Раз в сутки на событие и срок сообщает о приближающихся датах. */
+    fun checkDates() {
+        if (dateKindsOn().isEmpty()) return
+        viewModelScope.launch {
+            val today = java.time.LocalDate.now()
+            val seen = uiPrefs().getStringSet("dates_notified", emptySet())!!.toMutableSet()
+            val leads = mapOf("subs" to listOf(2, 0), "bday" to listOf(1, 0), "warr" to listOf(30, 7), "debt" to listOf(0))
+            val lines = ArrayList<String>()
+            for (it in dueItems()) {
+                val nx = it.next ?: continue
+                val left = java.time.temporal.ChronoUnit.DAYS.between(today, nx).toInt()
+                val lead = leads[it.kind]?.firstOrNull { l -> left == l } ?: continue
+                val key = "${it.noteId}|$nx|$lead"
+                if (!seen.add(key)) continue
+                val what = when (it.kind) { "subs" -> "Списание"; "bday" -> "Дата"; "warr" -> "Гарантия заканчивается"; else -> "Вернуть долг" }
+                lines.add("$what: ${it.name} — ${ru.stasoft.mynotes.data.daysText(nx, today)}" + (it.amount?.let { a -> ", " + String.format(java.util.Locale("ru"), "%,.0f", Math.abs(a)).replace('\u00A0', ' ') + " ₽" } ?: ""))
+            }
+            if (lines.isEmpty()) return@launch
+            // старые ключи не копим
+            uiPrefs().edit().putStringSet("dates_notified", seen.filter { k -> k.split("|").getOrNull(1)?.let { d -> d >= today.minusDays(60).toString() } ?: false }.toSet()).apply()
+            ru.stasoft.mynotes.reminders.ReminderNotifier.showText(app, "Скоро срок", lines.joinToString("\n"), 2_000_002)
+        }
+    }
+
     // ---------- здоровье и привычки ----------
 
     var healthText by mutableStateOf(uiPrefs().getString("health_cfg", DEFAULT_HEALTH) ?: DEFAULT_HEALTH)
