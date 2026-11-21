@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ru.stasoft.mynotes.modules.MODULE_CATEGORIES
 import ru.stasoft.mynotes.modules.Modules
 
 /** Раздел настроек «Модули»: включение необязательных функций. */
@@ -28,17 +29,27 @@ fun ModulesSection(vm: AppViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp),
     )
-    Modules.all.forEach { m ->
-        val on = Modules.on(m.id)
-        Row(
-            Modifier.fillMaxWidth().clickable { vm.setModule(m.id, !on) }.padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(m.title, style = MaterialTheme.typography.bodyLarge)
-                Text(m.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    MODULE_CATEGORIES.forEach { cat ->
+        val list = Modules.all.filter { it.category == cat }
+        if (list.isEmpty()) return@forEach
+        Text(
+            cat.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 2.dp),
+        )
+        list.forEach { m ->
+            val on = Modules.on(m.id)
+            Row(
+                Modifier.fillMaxWidth().clickable { vm.setModule(m.id, !on) }.padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.title, style = MaterialTheme.typography.bodyLarge)
+                    Text(m.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AppSwitch(checked = on, onCheckedChange = { vm.setModule(m.id, it) })
             }
-            AppSwitch(checked = on, onCheckedChange = { vm.setModule(m.id, it) })
         }
     }
 }

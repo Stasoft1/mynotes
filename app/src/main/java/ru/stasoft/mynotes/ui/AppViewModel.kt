@@ -64,6 +64,8 @@ import ru.stasoft.mynotes.data.extractVoiceCommands
 import ru.stasoft.mynotes.data.resolveIconName
 import ru.stasoft.mynotes.importer.MtntImporter
 
+private const val DEFAULT_BUDGET = "Продукты\nТранспорт\nДом\nЗдоровье\nОдежда\nСвязь\nРазвлечения\nПрочее"
+
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     init { Modules.init(app) }
 
@@ -885,8 +887,47 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Подсказки от модулей (например, «Авто» — названия машин). */
-    private fun moduleFieldValues(name: String): List<String> =
-        if (Modules.on("auto") && name.equals("Авто", ignoreCase = true)) cars.value.map { it.name } else emptyList()
+    private fun moduleFieldValues(name: String): List<String> = when {
+        Modules.on("auto") && name.equals("Авто", ignoreCase = true) -> cars.value.map { it.name }
+        Modules.on("budget") && name.equals("Категория", ignoreCase = true) -> ru.stasoft.mynotes.data.parseBudgetConfig(budgetText).categories
+        else -> emptyList()
+    }
+
+    // ---------- модуль «Бюджет» ----------
+
+    var budgetText by mutableStateOf(uiPrefs().getString("budget_cfg", DEFAULT_BUDGET) ?: DEFAULT_BUDGET)
+        private set
+
+    fun updateBudgetText(t: String) {
+        budgetText = t
+        uiPrefs().edit().putString("budget_cfg", t).apply()
+    }
+
+    /** Все траты и доходы из заметок. */
+    suspend fun expenses(): List<ru.stasoft.mynotes.data.Expense> {
+        val dao = dao() ?: return emptyList()
+        return withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.parseExpenses(dao.allNotes().first()) }
+    }
+
+    /** Один раз в месяц на категорию сообщает, что лимит исчерпан. */
+    fun checkBudget() {
+        if (!Modules.on("budget")) return
+        val cfg = ru.stasoft.mynotes.data.parseBudgetConfig(budgetText)
+        if (cfg.limits.isEmpty()) return
+        viewModelScope.launch {
+            val now = java.time.LocalDate.now()
+            val cur = now.year * 12 + (now.monthValue - 1)
+            val key = "budget_notified_${now.year}-${now.monthValue}"
+            val done = uiPrefs().getStringSet(key, emptySet())!!.toSet()
+            val spent = expenses().filter { !it.income && ru.stasoft.mynotes.data.monthKey(it.date) == cur }
+                .groupBy { it.category }.mapValues { e -> e.value.sumOf { it.amount } }
+            val over = cfg.limits.filter { (c, l) -> (spent[c] ?: 0.0) >= l && c !in done }
+            if (over.isEmpty()) return@launch
+            uiPrefs().edit().putStringSet(key, done + over.keys).apply()
+            fun n(v: Double) = String.format(java.util.Locale("ru"), "%,.0f", v).replace('\u00A0', ' ')
+            ru.stasoft.mynotes.reminders.ReminderNotifier.showBudget(app, over.entries.joinToString("\n") { "${it.key}: ${n(spent[it.key] ?: 0.0)} из ${n(it.value)} ₽" })
+        }
+    }
 
     // ---------- модуль «Авто» ----------
 

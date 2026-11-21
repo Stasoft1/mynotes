@@ -208,6 +208,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showReport by remember { mutableStateOf(false) }
     var showFuel by remember { mutableStateOf(false) }
     var showTable by remember { mutableStateOf(false) }
+    var showBudget by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
     androidx.compose.runtime.LaunchedEffect(serviceStatus) { vm.checkService() }
@@ -242,7 +243,7 @@ fun TreeScreen(vm: AppViewModel) {
     // Новый день: при возвращении в приложение создаём папку сегодняшнего дня, если включено.
     val dayOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(dayOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.ensureToday(); vm.checkService() } }
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) { vm.ensureToday(); vm.checkService(); vm.checkBudget() } }
         dayOwner.lifecycle.addObserver(obs)
         onDispose { dayOwner.lifecycle.removeObserver(obs) }
     }
@@ -316,6 +317,13 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 vm.startMulti(vm.selectedId)
+                            },
+                        )
+                        if (ru.stasoft.mynotes.modules.Modules.on("budget")) DropdownMenuItem(
+                            text = { Text("Бюджет…") },
+                            onClick = {
+                                menuOpen = false
+                                showBudget = true
                             },
                         )
                         DropdownMenuItem(
@@ -631,6 +639,7 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showService) ServiceDialog(vm, onDismiss = { showService = false })
+    if (showBudget) BudgetDialog(vm, onDismiss = { showBudget = false })
     if (showTable) PayTableDialog(vm, vm.selectedId ?: folderId, onDismiss = { showTable = false })
     if (showFuel) FuelDialog(vm, folderId, onDismiss = { showFuel = false })
     if (showReport) ReportDialog(vm, folderId, onDismiss = { showReport = false })
