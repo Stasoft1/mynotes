@@ -67,7 +67,7 @@ fun SettingsDialog(
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
                     "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
-                    "modules" to "Модули", "budget" to "Бюджет", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                    "modules" to "Модули", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.IconButton(onClick = { if (page != null) page = null else onDismiss() }) {
@@ -84,10 +84,11 @@ fun SettingsDialog(
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
                             SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
-                            if (MODS.on("budget") || MODS.on("auto") || MODS.on("day") || MODS.on("giga") || MODS.on("route")) {
+                            if (MODS.on("budget") || MODS.on("health") || MODS.on("auto") || MODS.on("day") || MODS.on("giga") || MODS.on("route")) {
                                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                                 SettingsTitle("Настройки модулей")
                                 if (MODS.on("budget")) SettingsAction(Icons.Filled.Savings, "Бюджет", "Категории и лимиты расходов") { page = "budget" }
+                                if (MODS.on("health")) SettingsAction(Icons.Filled.Info, "Показатели", "Список показателей здоровья") { page = "health" }
                                 if (MODS.on("auto")) SettingsAction(Icons.Filled.DirectionsCar, "Авто", "Машины, регламент ТО, привязка заметок") { page = "auto" }
                                 if (MODS.on("day")) SettingsAction(Icons.Filled.CalendarMonth, "Папка дня", "График и шаблоны для нового дня") { page = "day" }
                                 if (MODS.on("giga")) SettingsAction(Icons.Filled.Mic, "Голосовой ввод", "Ключ GigaChat для ИИ-разбора") { page = "giga" }
@@ -163,6 +164,7 @@ fun SettingsDialog(
                         "lists" -> FieldListsSection(vm)
                         "modules" -> ModulesSection(vm)
                         "budget" -> BudgetSettingsSection(vm)
+                        "health" -> HealthSettingsSection(vm)
                         "auto" -> AutoSettingsSection(vm)
                         "day" -> AutoDaySettingsSection(vm)
                         "giga" -> VoiceSettingsSection(vm)

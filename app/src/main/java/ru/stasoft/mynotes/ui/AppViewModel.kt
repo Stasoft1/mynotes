@@ -64,6 +64,8 @@ import ru.stasoft.mynotes.data.extractVoiceCommands
 import ru.stasoft.mynotes.data.resolveIconName
 import ru.stasoft.mynotes.importer.MtntImporter
 
+private const val DEFAULT_HEALTH = "Вес = кг\nДавление = мм рт. ст.\nПульс = уд/мин\nСахар = ммоль/л\nТемпература = °C"
+
 private const val DEFAULT_BUDGET = "Продукты\nТранспорт\nДом\nЗдоровье\nОдежда\nСвязь\nРазвлечения\nПрочее"
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
@@ -893,6 +895,37 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         Modules.on("auto") && name.equals("Авто", ignoreCase = true) -> cars.value.map { it.name }
         Modules.on("budget") && name.equals("Категория", ignoreCase = true) -> ru.stasoft.mynotes.data.parseBudgetConfig(budgetText).categories
         else -> emptyList()
+    }
+
+    // ---------- здоровье и привычки ----------
+
+    var healthText by mutableStateOf(uiPrefs().getString("health_cfg", DEFAULT_HEALTH) ?: DEFAULT_HEALTH)
+        private set
+
+    fun updateHealthText(t: String) {
+        healthText = t
+        uiPrefs().edit().putString("health_cfg", t).apply()
+    }
+
+    suspend fun allNotesOnce(): List<NoteEntity> {
+        val dao = dao() ?: return emptyList()
+        return withContext(Dispatchers.Default) { dao.allNotes().first() }
+    }
+
+    /** Новая заметка в корневой папке [folder] (папка создаётся, если её нет). */
+    suspend fun addNoteIn(folder: String, title: String, body: String): Long? {
+        val dao = dao() ?: return null
+        val now = System.currentTimeMillis()
+        val root = dao.childrenOnce(null).firstOrNull { it.isFolder && it.title.equals(folder, ignoreCase = true) }?.id
+            ?: dao.insert(NoteEntity(parentId = null, isFolder = true, title = folder, sortIndex = dao.maxSort(null) + 1, createdAt = now, updatedAt = now))
+        return dao.insert(NoteEntity(parentId = root, title = title, body = body, sortIndex = dao.maxSort(root) + 1, createdAt = now, updatedAt = now))
+    }
+
+    /** Ставит или снимает отметку привычки за день. */
+    suspend fun toggleHabit(noteId: Long, day: java.time.LocalDate) {
+        val dao = dao() ?: return
+        val n = dao.get(noteId) ?: return
+        dao.update(n.copy(body = ru.stasoft.mynotes.data.toggleHabitBody(n.body, day), updatedAt = System.currentTimeMillis()))
     }
 
     // ---------- модуль «Бюджет» ----------

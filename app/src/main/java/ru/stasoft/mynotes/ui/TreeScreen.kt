@@ -209,6 +209,8 @@ fun TreeScreen(vm: AppViewModel) {
     var showFuel by remember { mutableStateOf(false) }
     var showTable by remember { mutableStateOf(false) }
     var showBudget by remember { mutableStateOf(false) }
+    var showHealth by remember { mutableStateOf(false) }
+    var showHabits by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
     androidx.compose.runtime.LaunchedEffect(serviceStatus) { vm.checkService() }
@@ -317,6 +319,20 @@ fun TreeScreen(vm: AppViewModel) {
                             onClick = {
                                 menuOpen = false
                                 vm.startMulti(vm.selectedId)
+                            },
+                        )
+                        if (ru.stasoft.mynotes.modules.Modules.on("health")) DropdownMenuItem(
+                            text = { Text("Показатели…") },
+                            onClick = {
+                                menuOpen = false
+                                showHealth = true
+                            },
+                        )
+                        if (ru.stasoft.mynotes.modules.Modules.on("habits")) DropdownMenuItem(
+                            text = { Text("Привычки…") },
+                            onClick = {
+                                menuOpen = false
+                                showHabits = true
                             },
                         )
                         if (ru.stasoft.mynotes.modules.Modules.on("budget")) DropdownMenuItem(
@@ -639,6 +655,8 @@ fun TreeScreen(vm: AppViewModel) {
     if (showSort) SortDialog(vm, onDismiss = { showSort = false })
     if (showCheck) ReadingCheckDialog(vm, onDismiss = { showCheck = false })
     if (showService) ServiceDialog(vm, onDismiss = { showService = false })
+    if (showHealth) HealthDialog(vm, onDismiss = { showHealth = false })
+    if (showHabits) HabitsDialog(vm, onDismiss = { showHabits = false })
     if (showBudget) BudgetDialog(vm, onDismiss = { showBudget = false })
     if (showTable) PayTableDialog(vm, vm.selectedId ?: folderId, onDismiss = { showTable = false })
     if (showFuel) FuelDialog(vm, folderId, onDismiss = { showFuel = false })
