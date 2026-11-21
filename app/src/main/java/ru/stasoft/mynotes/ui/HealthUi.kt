@@ -45,17 +45,17 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import ru.stasoft.mynotes.data.Habit
 import ru.stasoft.mynotes.data.NoteEntity
-import ru.stasoft.mynotes.data.Reading
+import ru.stasoft.mynotes.data.Measure
 import ru.stasoft.mynotes.data.fmtDate
 import ru.stasoft.mynotes.data.parseHabits
 import ru.stasoft.mynotes.data.parseMetrics
-import ru.stasoft.mynotes.data.parseReadings
+import ru.stasoft.mynotes.data.parseMeasures
 import java.time.LocalDate
 
 private fun num(v: Double): String =
     if (v == Math.rint(v)) v.toLong().toString() else String.format(java.util.Locale("ru"), "%.1f", v)
 
-private fun valueText(r: Reading) = num(r.v) + (r.v2?.let { "/" + num(it) } ?: "")
+private fun valueText(r: Measure) = num(r.v) + (r.v2?.let { "/" + num(it) } ?: "")
 
 /** Показатели здоровья: динамика, минимум, среднее и максимум за период, график, быстрый ввод замера. */
 @Composable
@@ -92,7 +92,7 @@ fun HealthDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                     }
                     val unit = metrics.firstOrNull { it.name == m }?.unit.orEmpty()
                     val from = LocalDate.now().minusDays(days.toLong())
-                    val rs = remember(all, m) { parseReadings(all, m) }
+                    val rs = remember(all, m) { parseMeasures(all, m) }
                     val inPeriod = rs.filter { !it.date.isBefore(from) }
                     if (inPeriod.isEmpty()) Text(
                         "Нет замеров за период. Нажмите «+ Замер» или напишите в заметке строку «$m: значение» (при необходимости «Дата: дд.мм.гггг»).",

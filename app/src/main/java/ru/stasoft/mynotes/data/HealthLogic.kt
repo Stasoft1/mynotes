@@ -13,15 +13,15 @@ fun parseMetrics(text: String): List<Metric> = text.lines().mapNotNull { l ->
 }
 
 /** Замер: [v2] — вторая цифра, например нижнее давление в «120/80». */
-class Reading(val date: LocalDate, val v: Double, val v2: Double?, val noteId: Long)
+class Measure(val date: LocalDate, val v: Double, val v2: Double?, val noteId: Long)
 
 private val PAIR = Regex("""^\s*(\d+(?:[.,]\d+)?)\s*/\s*(\d+(?:[.,]\d+)?)""")
 
 fun noteLocalDate(n: NoteEntity): LocalDate = Instant.ofEpochMilli(expenseDate(n)).atZone(ZoneId.systemDefault()).toLocalDate()
 
 /** Все замеры показателя [metric]: заметки с полем «Показатель: значение» («Вес: 82,5», «Давление: 120/80»). */
-fun parseReadings(notes: List<NoteEntity>, metric: String): List<Reading> {
-    val out = ArrayList<Reading>()
+fun parseMeasures(notes: List<NoteEntity>, metric: String): List<Measure> {
+    val out = ArrayList<Measure>()
     for (n in notes) {
         if (n.isFolder) continue
         val raw = fieldText(n.body, metric) ?: continue
@@ -32,7 +32,7 @@ fun parseReadings(notes: List<NoteEntity>, metric: String): List<Reading> {
             v = pair.groupValues[1].replace(',', '.').toDoubleOrNull()
             v2 = pair.groupValues[2].replace(',', '.').toDoubleOrNull()
         } else v = leadingNumber(raw)
-        if (v != null) out.add(Reading(noteLocalDate(n), v, v2, n.id))
+        if (v != null) out.add(Measure(noteLocalDate(n), v, v2, n.id))
     }
     return out.sortedBy { it.date }
 }
