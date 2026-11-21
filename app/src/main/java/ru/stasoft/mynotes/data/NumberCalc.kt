@@ -89,7 +89,7 @@ private fun below(sorted: DoubleArray?, x: Double): Double? {
  * наибольшее показание минус ближайшее меньшее показание до неё (конец предыдущего периода). Для заметки это
  * дистанция от предыдущего показания. Порядок записей в дереве не важен.
  */
-fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
+fun computeNumbers(rows: List<NumRow>, defaultCar: String? = null): Map<Long, List<Pair<String, Double>>> {
     if (rows.none { it.isFolder && it.varsJson.isNotEmpty() }) return emptyMap()
     val kids = HashMap<Long?, MutableList<NumRow>>()
     for (r in rows) kids.getOrPut(r.parentId) { mutableListOf() }.add(r)
@@ -108,13 +108,17 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
         if (v.row.isFolder) kids[v.row.id]?.forEach { visit(it, v.childEff, v.date) }
     }
 
+    // Показания одометра ведутся по машинам: заметка без «Авто:» относится к машине по умолчанию.
+    fun carOf(head: String): String = (fieldText(head, "Авто")?.takeIf { it.isNotBlank() } ?: defaultCar.orEmpty()).trim().lowercase()
+    fun readKey(field: String, head: String) = field + "|" + carOf(head)
+
     // Все показания по полям, где действует правило span.
     val readingLists = HashMap<String, MutableList<Double>>()
     for (v in order) {
         if (v.row.isFolder) continue
         for (d in v.eff) {
             if (d.agg != "span") continue
-            parseNoteNumber(v.row.head, d.fieldName())?.let { readingLists.getOrPut(d.fieldName()) { mutableListOf() }.add(it) }
+            parseNoteNumber(v.row.head, d.fieldName())?.let { readingLists.getOrPut(readKey(d.fieldName(), v.row.head)) { mutableListOf() }.add(it) }
         }
     }
     val readings = HashMap<String, DoubleArray>()
@@ -183,10 +187,17 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
                         if (key != null) balanceAt(d.name, key)?.let { values.add(d.name to it) }
                     }
                     "span" -> {
-                        val a = raw?.get(d.name) ?: continue
-                        val prev = below(readings[d.fieldName()], a.min)
-                        val value = if (prev != null) a.max - prev else if (a.max > a.min) a.max - a.min else null
-                        if (value != null) values.add(d.name to value)
+                        // Прирост папки — сумма приростов по каждой машине отдельно.
+                        var total = 0.0
+                        var any = false
+                        for ((k, a) in raw.orEmpty()) {
+                            if (!k.startsWith(d.name + "\u0000")) continue
+                            val car = k.substringAfter('\u0000')
+                            val prev = below(readings[d.fieldName() + "|" + car], a.min)
+                            val value = if (prev != null) a.max - prev else if (a.max > a.min) a.max - a.min else null
+                            if (value != null) { total += value; any = true }
+                        }
+                        if (any) values.add(d.name to total)
                     }
                     else -> acc?.get(d.name)?.let { values.add(d.name to it.result(d.agg)) }
                 }
@@ -210,8 +221,8 @@ fun computeNumbers(rows: List<NumRow>): Map<Long, List<Pair<String, Double>>> {
                 val n = (if (d.agg == "sum") parseNoteSum(r.head, d.fieldName()) else parseNoteNumber(r.head, d.fieldName()))
                     ?: formulaValue(d, r.head, v.eff) ?: continue
                 if (d.agg == "span") {
-                    below(readings[d.fieldName()], n)?.let { values.add(d.name to n - it) }
-                    if (parent != null) raws.getOrPut(parent) { LinkedHashMap() }.getOrPut(d.name) { Acc() }.add(n)
+                    below(readings[readKey(d.fieldName(), r.head)], n)?.let { values.add(d.name to n - it) }
+                    if (parent != null) raws.getOrPut(parent) { LinkedHashMap() }.getOrPut(d.name + "\u0000" + carOf(r.head)) { Acc() }.add(n)
                 } else {
                     values.add(d.name to n)
                 }

@@ -152,10 +152,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         dbFlow
             .flatMapLatest { db ->
                 if (db == null) flowOf(emptyMap())
-                else db.notes().changeStamp().map {
+                else combine(db.notes().changeStamp(), db.notes().cars()) { _, cs -> cs }.map { cs ->
                     try {
                         val rows = db.notes().numRows()
-                        withContext(Dispatchers.Default) { computeNumbers(rows) }
+                        // Прирост пробега считается по каждой машине отдельно; без «Авто:» — машина по умолчанию.
+                        val dc = if (Modules.on("auto")) (cs.firstOrNull { it.isDefault } ?: cs.firstOrNull())?.name else null
+                        withContext(Dispatchers.Default) { computeNumbers(rows, dc) }
                     } catch (_: Exception) {
                         emptyMap()
                     }
