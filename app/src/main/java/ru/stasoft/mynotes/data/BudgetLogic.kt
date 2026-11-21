@@ -34,7 +34,10 @@ fun parseExpenses(notes: List<NoteEntity>): List<Expense> {
     val out = ArrayList<Expense>()
     for (n in notes) {
         if (n.isFolder) continue
-        val sum = fieldText(n.body, "Сумма")?.let(::leadingNumber)
+        // Расход — поле «Расход:» или «Сумма:» вместе с «Категория:» / «Магазин:». Одинокая «Сумма:» (оклад, счёт и т.п.) не считается тратой.
+        val explicit = fieldText(n.body, "Расход")?.let(::leadingNumber)
+        val hasContext = !fieldText(n.body, "Категория").isNullOrBlank() || !fieldText(n.body, "Магазин").isNullOrBlank()
+        val sum = explicit ?: if (hasContext) fieldText(n.body, "Сумма")?.let(::leadingNumber) else null
         val inc = fieldText(n.body, "Доход")?.let(::leadingNumber)
         if (sum == null && inc == null) continue
         val cat = fieldText(n.body, "Категория")?.takeIf { it.isNotBlank() } ?: "Без категории"
