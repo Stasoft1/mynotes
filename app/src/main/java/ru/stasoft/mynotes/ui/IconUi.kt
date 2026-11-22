@@ -34,14 +34,12 @@ import ru.stasoft.mynotes.R
 private class AppIcon(val alias: String, val title: String, val res: Int)
 
 private val ICONS = listOf(
-    AppIcon("IconClassic", "Классика", R.mipmap.ic_launcher),
-    AppIcon("IconNotebook", "Блокнот", R.mipmap.ic_launcher_notebook),
-    AppIcon("IconTree", "Дерево", R.mipmap.ic_launcher_tree),
-    AppIcon("IconCheck", "Галочка", R.mipmap.ic_launcher_check),
-    AppIcon("IconMono", "Минимал", R.mipmap.ic_launcher_mono),
+    AppIcon("IconJapan", "Японский", R.mipmap.ic_launcher_japan),
+    AppIcon("IconPop", "Яркий", R.mipmap.ic_launcher_pop),
+    AppIcon("IconWater", "Акварель", R.mipmap.ic_launcher_water),
     AppIcon("IconNeon", "Неон", R.mipmap.ic_launcher_neon),
-    AppIcon("IconBookmark", "Закладка", R.mipmap.ic_launcher_bookmark),
-    AppIcon("IconLock", "Замок", R.mipmap.ic_launcher_lock),
+    AppIcon("IconGreen", "Зелёный", R.mipmap.ic_launcher_green),
+    AppIcon("IconPixel", "Пиксели", R.mipmap.ic_launcher_pixel),
 )
 
 private fun cn(ctx: Context, alias: String) = ComponentName(ctx.packageName, "ru.stasoft.mynotes.$alias")
@@ -50,8 +48,8 @@ private fun currentIcon(ctx: Context): String =
     ICONS.firstOrNull {
         val st = ctx.packageManager.getComponentEnabledSetting(cn(ctx, it.alias))
         st == PackageManager.COMPONENT_ENABLED_STATE_ENABLED ||
-            (st == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && it.alias == "IconClassic")
-    }?.alias ?: "IconClassic"
+            (st == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && it.alias == "IconJapan")
+    }?.alias ?: "IconJapan"
 
 private fun applyIcon(ctx: Context, alias: String) {
     val pm = ctx.packageManager
@@ -72,7 +70,7 @@ fun IconSettingsSection() {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
-    ICONS.chunked(4).forEach { row ->
+    ICONS.chunked(3).forEach { row ->
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             row.forEach { ic ->
                 val bmp = remember(ic.res) { ctx.getDrawable(ic.res)?.toBitmap(192, 192)?.asImageBitmap() }
@@ -83,17 +81,17 @@ fun IconSettingsSection() {
                     if (bmp != null) {
                         Image(
                             bmp, ic.title,
-                            Modifier.size(64.dp).clip(CircleShape).border(
+                            Modifier.size(72.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).border(
                                 if (selected == ic.alias) 3.dp else 1.dp,
                                 if (selected == ic.alias) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                CircleShape,
+                                androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             ),
                         )
                     }
                     Text(ic.title, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
                 }
             }
-            repeat(4 - row.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
+            repeat(3 - row.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
         }
     }
 }

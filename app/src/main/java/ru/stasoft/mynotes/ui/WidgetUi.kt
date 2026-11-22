@@ -44,7 +44,7 @@ import ru.stasoft.mynotes.widgets.WidgetRender
 
 private class Opt(val id: Long?, val label: String)
 
-private fun pathOf(n: NoteEntity, by: Map<Long, NoteEntity>): String {
+internal fun pathOf(n: NoteEntity, by: Map<Long, NoteEntity>): String {
     val parts = ArrayList<String>()
     var c: NoteEntity? = n
     var guard = 0

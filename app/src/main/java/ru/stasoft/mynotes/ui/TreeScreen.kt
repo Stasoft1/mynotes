@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.VerticalAlignTop
@@ -211,6 +212,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showBudget by remember { mutableStateOf(false) }
     var showHealth by remember { mutableStateOf(false) }
     var showDates by remember { mutableStateOf(false) }
+    var intoTarget by remember { mutableStateOf<NoteEntity?>(null) }
     var showHabits by remember { mutableStateOf(false) }
     var showService by remember { mutableStateOf(false) }
     val serviceStatus by vm.serviceStatus.collectAsState()
@@ -711,6 +713,7 @@ fun TreeScreen(vm: AppViewModel) {
             },
         )
     }
+    intoTarget?.let { note -> MoveIntoDialog(vm, note) { intoTarget = null } }
     actionTarget?.let { note ->
         ActionDialog(
             note = note,
@@ -719,6 +722,9 @@ fun TreeScreen(vm: AppViewModel) {
             onDelete = { vm.delete(note) },
             onFlatten = { toRoot -> vm.flattenFolder(note, toRoot) },
             onClip = { move -> vm.startClip(note, move) },
+            hasClip = vm.clip != null && vm.clip!!.ids.none { it == note.id },
+            onPasteInto = { vm.pasteInto(note.id) },
+            onMoveInto = { intoTarget = note },
             onMulti = { vm.startMulti(note.id) },
             canReorder = query.isBlank() && vm.sortMode.value == 0,
             onEdge = { top -> vm.moveToEdge(note, top) },
@@ -867,6 +873,9 @@ private fun ActionDialog(
     onDelete: () -> Unit,
     onFlatten: (toRoot: Boolean) -> Unit,
     onClip: (move: Boolean) -> Unit,
+    hasClip: Boolean,
+    onPasteInto: () -> Unit,
+    onMoveInto: () -> Unit,
     onMulti: () -> Unit,
     canReorder: Boolean,
     onEdge: (top: Boolean) -> Unit,
@@ -917,6 +926,8 @@ private fun ActionDialog(
             Column {
                 Item(Icons.Filled.Edit, "Переименовать") { mode = 1 }
                 Item(Icons.Filled.Checklist, "Выбрать несколько…") { onMulti(); onDismiss() }
+                if (hasClip) Item(Icons.Filled.ContentPaste, "Вставить внутрь «$name»") { onPasteInto(); onDismiss() }
+                Item(Icons.Filled.DriveFileMove, "Поместить внутрь…") { onMoveInto(); onDismiss() }
                 Item(Icons.Filled.DriveFileMove, "Переместить в другую папку…") { onClip(true); onDismiss() }
                 Item(Icons.Filled.ContentCopy, if (note.isFolder) "Копировать со всем содержимым…" else "Копировать…") { onClip(false); onDismiss() }
                 if (canReorder) {

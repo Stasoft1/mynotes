@@ -80,7 +80,7 @@ fun SettingsDialog(
                     when (page) {
                         null -> {
                             SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема и стиль кнопок") { page = "look" }
-                            SettingsAction(Icons.Filled.Apps, "Значок приложения", "Восемь вариантов значка") { page = "icon" }
+                            SettingsAction(Icons.Filled.Apps, "Значок приложения", "Шесть вариантов значка") { page = "icon" }
                             SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Вход по отпечатку") { page = "security" }
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }

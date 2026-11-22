@@ -17,8 +17,8 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_japan"
+        android:roundIcon="@mipmap/ic_launcher_japan"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyNotes">
@@ -29,12 +29,12 @@
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
         <activity-alias
-            android:name=".IconClassic"
+            android:name=".IconJapan"
             android:targetActivity=".MainActivity"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:roundIcon="@mipmap/ic_launcher"
+            android:icon="@mipmap/ic_launcher_japan"
+            android:roundIcon="@mipmap/ic_launcher_japan"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -42,12 +42,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".IconNotebook"
+            android:name=".IconPop"
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_notebook"
-            android:roundIcon="@mipmap/ic_launcher_notebook"
+            android:icon="@mipmap/ic_launcher_pop"
+            android:roundIcon="@mipmap/ic_launcher_pop"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -55,38 +55,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".IconTree"
+            android:name=".IconWater"
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_tree"
-            android:roundIcon="@mipmap/ic_launcher_tree"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-        <activity-alias
-            android:name=".IconCheck"
-            android:targetActivity=".MainActivity"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_check"
-            android:roundIcon="@mipmap/ic_launcher_check"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-        <activity-alias
-            android:name=".IconMono"
-            android:targetActivity=".MainActivity"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_mono"
-            android:roundIcon="@mipmap/ic_launcher_mono"
+            android:icon="@mipmap/ic_launcher_water"
+            android:roundIcon="@mipmap/ic_launcher_water"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -107,12 +81,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".IconBookmark"
+            android:name=".IconGreen"
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bookmark"
-            android:roundIcon="@mipmap/ic_launcher_bookmark"
+            android:icon="@mipmap/ic_launcher_green"
+            android:roundIcon="@mipmap/ic_launcher_green"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -120,12 +94,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".IconLock"
+            android:name=".IconPixel"
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_lock"
-            android:roundIcon="@mipmap/ic_launcher_lock"
+            android:icon="@mipmap/ic_launcher_pixel"
+            android:roundIcon="@mipmap/ic_launcher_pixel"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

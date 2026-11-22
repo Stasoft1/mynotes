@@ -1923,10 +1923,19 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Вставляет выбранные записи (папки — со всем содержимым) в открытую сейчас папку. */
-    fun pasteHere() {
+    fun pasteHere() = pasteInto(folderId.value)
+
+    /** Переносит записи [ids] внутрь [target] (запись или папка, null — корень); обычная заметка при этом становится папкой. */
+    fun moveInto(ids: List<Long>, target: Long?) {
+        if (ids.isEmpty()) return
+        clip = Clip(ids, "", true)
+        pasteInto(target)
+    }
+
+    /** Вставляет буфер переноса или копирования внутрь [target]. */
+    fun pasteInto(target: Long?) {
         val c = clip ?: return
         val db = dbFlow.value ?: return
-        val target = folderId.value
         viewModelScope.launch {
             try {
                 val dao = db.notes()
