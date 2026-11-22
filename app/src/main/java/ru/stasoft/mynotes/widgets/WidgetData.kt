@@ -13,7 +13,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Кнопка виджета «Быстрый ввод». */
-class QuickBtn(val label: String, val folderId: Long?, val template: String)
+class QuickBtn(val label: String, val folderId: Long?, val template: String, val daily: Boolean = false)
 
 /** Настройки одного виджета. kind: folder, note, dates, quick. theme: 0 авто, 1 светлая, 2 тёмная, 3 прозрачная. size: 0..2. */
 class WidgetCfg(
@@ -28,14 +28,16 @@ class WidgetCfg(
     val newestFirst: Boolean = true,
     val template: String = "",
     val quick: List<QuickBtn> = emptyList(),
+    /** Папка дня: [folderId] — родительская, а работать нужно с папкой сегодняшней даты внутри неё. */
+    val daily: Boolean = false,
 ) {
     fun toJson(): String = JSONObject().apply {
         put("kind", kind); put("title", title); put("count", count); put("theme", theme); put("size", size)
-        put("add", add); put("newest", newestFirst); put("template", template)
+        put("add", add); put("newest", newestFirst); put("template", template); put("daily", daily)
         folderId?.let { put("folder", it) }
         noteId?.let { put("note", it) }
         put("quick", JSONArray().apply {
-            quick.forEach { q -> put(JSONObject().put("l", q.label).put("t", q.template).apply { q.folderId?.let { put("f", it) } }) }
+            quick.forEach { q -> put(JSONObject().put("l", q.label).put("t", q.template).put("d", q.daily).apply { q.folderId?.let { put("f", it) } }) }
         })
     }.toString()
 
@@ -48,8 +50,8 @@ class WidgetCfg(
                 folderId = if (o.has("folder")) o.getLong("folder") else null,
                 noteId = if (o.has("note")) o.getLong("note") else null,
                 count = o.optInt("count", 4).coerceIn(2, 6), theme = o.optInt("theme", 0), size = o.optInt("size", 1).coerceIn(0, 2),
-                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"),
-                quick = (0 until qa.length()).map { i -> qa.getJSONObject(i).let { q -> QuickBtn(q.optString("l"), if (q.has("f")) q.getLong("f") else null, q.optString("t")) } },
+                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"), daily = o.optBoolean("daily", false),
+                quick = (0 until qa.length()).map { i -> qa.getJSONObject(i).let { q -> QuickBtn(q.optString("l"), if (q.has("f")) q.getLong("f") else null, q.optString("t"), q.optBoolean("d", false)) } },
             )
         } catch (_: Exception) {
             null
@@ -60,7 +62,7 @@ class WidgetCfg(
 /** Строка виджета; [day] — день (epochDay) для сроков, [sub] считается при показе. */
 class WRow(val title: String, val sub: String, val id: Long, val day: Long? = null)
 
-class WSnap(val title: String, val text: String, val rows: List<WRow>)
+class WSnap(val title: String, val text: String, val rows: List<WRow>, val day: Long? = null)
 
 object WidgetPrefs {
     private fun p(ctx: Context) = ctx.getSharedPreferences("widgets", Context.MODE_PRIVATE)
@@ -103,7 +105,7 @@ object WidgetStore {
         try {
             val root = JSONObject()
             snaps.forEach { (id, s) ->
-                root.put(id.toString(), JSONObject().put("t", s.title).put("x", s.text).put("r", JSONArray().apply {
+                root.put(id.toString(), JSONObject().put("t", s.title).put("x", s.text).apply { s.day?.let { put("y", it) } }.put("r", JSONArray().apply {
                     s.rows.forEach { r -> put(JSONObject().put("a", r.title).put("b", r.sub).put("i", r.id).apply { r.day?.let { d -> put("d", d) } }) }
                 }))
             }
@@ -128,6 +130,7 @@ object WidgetStore {
                 k.toInt() to WSnap(
                     o.optString("t"), o.optString("x"),
                     (0 until ra.length()).map { i -> ra.getJSONObject(i).let { r -> WRow(r.optString("a"), r.optString("b"), r.optLong("i"), if (r.has("d")) r.getLong("d") else null) } },
+                    if (o.has("y")) o.getLong("y") else null,
                 )
             }
         }

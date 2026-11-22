@@ -101,6 +101,8 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
     var add by remember { mutableStateOf(old?.add ?: true) }
     var newest by remember { mutableStateOf(old?.newestFirst ?: true) }
     var template by remember { mutableStateOf(old?.template ?: "") }
+    var daily by remember { mutableStateOf(old?.daily ?: false) }
+    val qDaily = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.daily ?: false }) }
     val qLabel = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.label ?: "" }) }
     val qFolder = remember { mutableStateListOf<Long?>(*Array(3) { old?.quick?.getOrNull(it)?.folderId }) }
     val qTpl = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.template ?: "" }) }
@@ -108,9 +110,9 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
     var pick by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { notes = vm.allNotesOnce() }
     val by = remember(notes) { notes.associateBy { it.id } }
-    val folders = remember(notes) { listOf(Opt(null, "Главный экран (корень)")) + notes.filter { it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
+    val folders = remember(notes) { listOf(Opt(null, "Весь список (корень)")) + notes.filter { it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
     val plainNotes = remember(notes) { notes.filter { !it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
-    fun folderLabel(id: Long?) = id?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "Главный экран (корень)"
+    fun folderLabel(id: Long?) = id?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "Весь список (корень)"
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -123,7 +125,12 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                     OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Заголовок (необязательно)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     when (kind) {
                         "folder" -> {
-                            OutlinedButton(onClick = { pick = "folder" }, modifier = Modifier.fillMaxWidth()) { Text("Папка: " + folderLabel(folderId)) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Папка дня (по сегодняшней дате)", Modifier.weight(1f))
+                                Switch(checked = daily, onCheckedChange = { daily = it })
+                            }
+                            if (daily) Text("Выберите родительскую папку, например «Работа». Виджет сам найдёт внутри неё папку с сегодняшней датой в названии (Работа / 2026 / Ноябрь / 22.11.26); если её нет — создаст по образцу последней.", style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = { pick = "folder" }, modifier = Modifier.fillMaxWidth()) { Text((if (daily) "Родительская папка: " else "Папка: ") + folderLabel(folderId)) }
                             Text("Сколько строк", style = MaterialTheme.typography.labelLarge)
                             Chips((2..6).map { it.toString() }, count - 2) { count = it + 2 }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -146,11 +153,15 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                         }
                     }
                 } else {
-                    Text("До трёх кнопок: нажатие сразу открывает новую заметку в выбранной папке. Пустое название — кнопки нет.", style = MaterialTheme.typography.bodySmall)
+                    Text("До трёх кнопок: нажатие сразу открывает новую заметку, названную как кнопка, в выбранной папке (или в папке сегодняшнего дня). Пустое название — кнопки нет.", style = MaterialTheme.typography.bodySmall)
                     for (i in 0..2) {
                         Text("Кнопка ${i + 1}", style = MaterialTheme.typography.labelLarge)
                         OutlinedTextField(value = qLabel[i], onValueChange = { qLabel[i] = it }, label = { Text("Название на кнопке") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedButton(onClick = { pick = "q$i" }, modifier = Modifier.fillMaxWidth()) { Text("Папка: " + folderLabel(qFolder[i])) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Папка дня (по сегодняшней дате)", Modifier.weight(1f))
+                            Switch(checked = qDaily[i], onCheckedChange = { qDaily[i] = it })
+                        }
+                        OutlinedButton(onClick = { pick = "q$i" }, modifier = Modifier.fillMaxWidth()) { Text((if (qDaily[i]) "Родительская папка: " else "Папка: ") + folderLabel(qFolder[i])) }
                         OutlinedTextField(value = qTpl[i], onValueChange = { qTpl[i] = it }, label = { Text("Шаблон (например «Расход: »)") }, minLines = 1, modifier = Modifier.fillMaxWidth())
                     }
                 }
@@ -165,7 +176,8 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                 val cfg = WidgetCfg(
                     kind = kind, title = title.trim(), folderId = folderId, noteId = noteId, count = count, theme = theme, size = size, add = add,
                     newestFirst = newest, template = template,
-                    quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it]) },
+                    quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it], qDaily[it]) },
+                    daily = daily,
                 )
                 WidgetPrefs.put(ctx, wid, cfg)
                 WidgetRender.updateAll(ctx)

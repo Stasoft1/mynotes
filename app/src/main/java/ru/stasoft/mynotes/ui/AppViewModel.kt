@@ -574,7 +574,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- виджеты рабочего стола ----------
 
-    private class WidgetAction(val action: String, val note: Long, val folder: Long?, val tpl: String, val wid: Int)
+    private class WidgetAction(val action: String, val note: Long, val folder: Long?, val tpl: String, val wid: Int, val title: String, val daily: Boolean)
 
     private var pendingWidget: WidgetAction? = null
 
@@ -585,7 +585,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val a = i?.action ?: return
         if (!a.startsWith("ru.stasoft.mynotes.widget.")) return
         if (i.getStringExtra("tk") != ru.stasoft.mynotes.widgets.WidgetPrefs.token(app)) return
-        pendingWidget = WidgetAction(a, i.getLongExtra("note", -1L), i.getLongExtra("folder", -1L).takeIf { it >= 0 }, i.getStringExtra("tpl") ?: "", i.getIntExtra("wid", -1))
+        pendingWidget = WidgetAction(a, i.getLongExtra("note", -1L), i.getLongExtra("folder", -1L).takeIf { it >= 0 }, i.getStringExtra("tpl") ?: "", i.getIntExtra("wid", -1), i.getStringExtra("title") ?: "", i.getBooleanExtra("daily", false))
         i.action = null
     }
 
@@ -596,18 +596,18 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         pendingWidget = null
         when (p.action) {
             ru.stasoft.mynotes.widgets.ACTION_OPEN -> if (p.note >= 0) openById(p.note)
-            ru.stasoft.mynotes.widgets.ACTION_NEW -> newNoteIn(p.folder, p.tpl)
+            ru.stasoft.mynotes.widgets.ACTION_NEW -> newNoteIn(p.folder, p.tpl, p.title, p.daily)
             ru.stasoft.mynotes.widgets.ACTION_CONFIG -> if (p.wid >= 0) widgetConfigId = p.wid
         }
     }
 
     /** Новая заметка в папке [parent] (null — корень) с готовым текстом; сразу открывается редактор. */
-    fun newNoteIn(parent: Long?, body: String) {
+    fun newNoteIn(parent: Long?, body: String, title: String = "", daily: Boolean = false) {
         val dao = dao() ?: return
         viewModelScope.launch {
-            val p = parent?.takeIf { dao.get(it)?.isFolder == true }
+            val p = if (daily) dayFolder(parent) else parent?.takeIf { dao.get(it)?.isFolder == true }
             val now = System.currentTimeMillis()
-            val id = dao.insert(NoteEntity(parentId = p, body = body, sortIndex = dao.maxSort(p) + 1, createdAt = now, updatedAt = now))
+            val id = dao.insert(NoteEntity(parentId = p, title = title, body = body, sortIndex = dao.maxSort(p) + 1, createdAt = now, updatedAt = now))
             query.value = ""
             folderId.value = p
             refreshPath()
@@ -618,6 +618,41 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 loadChain(it)
             }
         }
+    }
+
+    /**
+     * Папка сегодняшнего дня внутри [root] (null — во всей базе). Если её нет, создаётся рядом с последней папкой дня,
+     * по её образцу; промежуточные папки года и месяца («2026», «Ноябрь») тоже переходят на новую дату.
+     */
+    private suspend fun dayFolder(root: Long?): Long? {
+        val dao = dao() ?: return null
+        val today = java.time.LocalDate.now()
+        val all = allNotesOnce()
+        ru.stasoft.mynotes.data.DayFolder.find(all, root, today)?.let { return it.id }
+        val byId = all.associateBy { it.id }
+        val now = System.currentTimeMillis()
+        suspend fun mk(title: String, parent: Long?) =
+            dao.insert(NoteEntity(parentId = parent, isFolder = true, title = title, sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now))
+        val rootOk = root?.takeIf { byId[it]?.isFolder == true }
+        val last = all.filter { it.isFolder && ru.stasoft.mynotes.data.dateInTitle(it.title) != null && ru.stasoft.mynotes.data.DayFolder.isUnder(it, rootOk, byId) }
+            .maxByOrNull { ru.stasoft.mynotes.data.dateInTitle(it.title)!! }
+            ?: return mk(formatLike("", today), rootOk)
+        val lastDate = ru.stasoft.mynotes.data.dateInTitle(last.title)!!
+        val chain = ArrayList<NoteEntity>()
+        var c = last.parentId
+        var g = 0
+        while (c != null && c != rootOk && g++ < 40) {
+            val n = byId[c] ?: break
+            chain.add(0, n)
+            c = n.parentId
+        }
+        var parent = rootOk
+        for (anc in chain) {
+            val t = ru.stasoft.mynotes.data.DayFolder.shiftTitle(anc.title, lastDate, today)
+            parent = if (t == anc.title && parent == anc.parentId) anc.id
+            else all.firstOrNull { it.isFolder && it.parentId == parent && it.title.equals(t, ignoreCase = true) }?.id ?: mk(t, parent)
+        }
+        return mk(formatLike(last.title, today), parent)
     }
 
     /** Пересчитывает данные виджетов, пока база открыта. */

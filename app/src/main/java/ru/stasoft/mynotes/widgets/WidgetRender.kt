@@ -38,8 +38,8 @@ object WidgetRender {
         .setAction(action).setData(Uri.parse(uri)).putExtra("tk", WidgetPrefs.token(ctx))
 
     fun openNote(ctx: Context, wid: Int, id: Long) = pi(ctx, base(ctx, ACTION_OPEN, "mynotes://w/$wid/open/$id").putExtra("note", id))
-    fun newNote(ctx: Context, wid: Int, slot: Int, folder: Long?, template: String) =
-        pi(ctx, base(ctx, ACTION_NEW, "mynotes://w/$wid/new/$slot").putExtra("folder", folder ?: -1L).putExtra("tpl", template))
+    fun newNote(ctx: Context, wid: Int, slot: Int, folder: Long?, template: String, title: String = "", daily: Boolean = false) =
+        pi(ctx, base(ctx, ACTION_NEW, "mynotes://w/$wid/new/$slot").putExtra("folder", folder ?: -1L).putExtra("tpl", template).putExtra("title", title).putExtra("daily", daily))
     fun configure(ctx: Context, wid: Int) = pi(ctx, base(ctx, ACTION_CONFIG, "mynotes://w/$wid/cfg").putExtra("wid", wid))
 
     fun updateAll(ctx: Context) {
@@ -81,7 +81,7 @@ object WidgetRender {
             rv.setViewVisibility(ids[i], View.VISIBLE)
             rv.setTextViewText(ids[i], b.label)
             rv.setTextColor(ids[i], c.text)
-            rv.setOnClickPendingIntent(ids[i], newNote(ctx, wid, i, b.folderId, b.template))
+            rv.setOnClickPendingIntent(ids[i], newNote(ctx, wid, i, b.folderId, b.template, b.label, b.daily))
         }
         return rv
     }
@@ -113,7 +113,7 @@ object WidgetRender {
         rv.setTextViewText(R.id.title, snap?.title ?: cfg.title.ifBlank { "МоиЗаметки" })
         if (cfg.kind == "folder" && cfg.add) {
             rv.setViewVisibility(R.id.add, View.VISIBLE)
-            rv.setOnClickPendingIntent(R.id.add, newNote(ctx, wid, 9, cfg.folderId, cfg.template))
+            rv.setOnClickPendingIntent(R.id.add, newNote(ctx, wid, 9, cfg.folderId, cfg.template, "", cfg.daily))
         }
         rv.setOnClickPendingIntent(R.id.title, configure(ctx, wid))
         if (snap == null) {
@@ -131,10 +131,15 @@ object WidgetRender {
         }
         if (snap.rows.isEmpty()) {
             rv.setViewVisibility(R.id.empty, View.VISIBLE)
-            rv.setTextViewText(R.id.empty, if (cfg.kind == "dates") "Ближайших сроков нет" else "В папке пусто")
+            rv.setTextViewText(R.id.empty, if (cfg.kind == "dates") "Ближайших сроков нет" else if (cfg.daily) "За сегодня записей пока нет" else "В папке пусто")
             return rv
         }
         val today = LocalDate.now()
+        if (cfg.daily && snap.day != today.toEpochDay()) {
+            rv.setViewVisibility(R.id.empty, View.VISIBLE)
+            rv.setTextViewText(R.id.empty, "Новый день — откройте приложение, виджет обновится")
+            return rv
+        }
         snap.rows.take(cfg.count).forEachIndexed { i, r ->
             rv.setViewVisibility(rowIds[i], View.VISIBLE)
             rv.setTextViewText(tIds[i], r.title)

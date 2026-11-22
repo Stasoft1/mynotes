@@ -48,11 +48,11 @@ object WidgetSync {
             val c = WidgetPrefs.get(ctx, id) ?: continue
             when (c.kind) {
                 "folder" -> {
-                    val f = c.folderId?.let { byId[it] }
-                    var kids = notes.filter { it.parentId == c.folderId }
+                    val f = if (c.daily) ru.stasoft.mynotes.data.DayFolder.find(notes, c.folderId, today) else c.folderId?.let { byId[it] }
+                    var kids = if (c.daily) (if (f == null) emptyList() else notes.filter { it.parentId == f.id }) else notes.filter { it.parentId == c.folderId }
                     kids = if (c.newestFirst) kids.sortedByDescending { it.updatedAt } else kids.sortedBy { it.sortIndex }
                     val rows = kids.take(c.count).map { n -> WRow((if (n.isFolder) "📁 " else "") + n.displayTitle().ifBlank { "Без названия" }, firstLine(n.body), n.id) }
-                    snaps[id] = WSnap(c.title.ifBlank { f?.displayTitle() ?: "Заметки" }, "", rows)
+                    snaps[id] = WSnap(c.title.ifBlank { f?.displayTitle() ?: if (c.daily) "Сегодня" else "Заметки" }, "", rows, if (c.daily) today.toEpochDay() else null)
                 }
                 "note" -> {
                     val n = c.noteId?.let { byId[it] }
