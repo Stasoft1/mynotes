@@ -493,6 +493,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     loadChain(n)
                 }
             }
+            // Нажатие виджета, пришедшее, пока приложение было закрыто паролем, выполняем сразу после входа.
+            runWidgetAction()
             startReminderSync(db)
             try {
                 withContext(Dispatchers.IO) { seedSnippetsOnce(db) }
