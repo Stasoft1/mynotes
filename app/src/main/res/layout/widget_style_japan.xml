@@ -2,12 +2,12 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
     <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/wbg_japan" android:contentDescription="@null"/>
     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:weightSum="1136">
-        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="400"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="400"/>
         <TextView android:id="@+id/q0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="182" android:gravity="center" android:paddingLeft="6dp" android:paddingRight="6dp" android:maxLines="2" android:ellipsize="end" android:textStyle="bold" android:textColor="#FF222222" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="26sp" android:autoSizeStepGranularity="1sp"/>
-        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="36"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="36"/>
         <TextView android:id="@+id/q1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="182" android:gravity="center" android:paddingLeft="6dp" android:paddingRight="6dp" android:maxLines="2" android:ellipsize="end" android:textStyle="bold" android:textColor="#FF222222" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="26sp" android:autoSizeStepGranularity="1sp"/>
-        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="36"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="36"/>
         <TextView android:id="@+id/q2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="184" android:gravity="center" android:paddingLeft="6dp" android:paddingRight="6dp" android:maxLines="2" android:ellipsize="end" android:textStyle="bold" android:textColor="#FF222222" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="26sp" android:autoSizeStepGranularity="1sp"/>
-        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="116"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="116"/>
     </LinearLayout>
 </FrameLayout>
