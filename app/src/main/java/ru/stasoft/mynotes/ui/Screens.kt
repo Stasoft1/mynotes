@@ -97,6 +97,7 @@ fun AppRoot(vm: AppViewModel) {
             vm.showReminders -> ReminderListScreen(vm)
             else -> TreeScreen(vm)
         }
+        if (vm.unlocked) vm.widgetConfigId?.let { id -> WidgetConfigDialog(vm, id) { vm.widgetConfigId = null } }
     }
 }
 

@@ -1,0 +1,215 @@
+package ru.stasoft.mynotes.ui
+
+import android.appwidget.AppWidgetManager
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.displayTitle
+import ru.stasoft.mynotes.widgets.QuickBtn
+import ru.stasoft.mynotes.widgets.WidgetCfg
+import ru.stasoft.mynotes.widgets.WidgetPrefs
+import ru.stasoft.mynotes.widgets.WidgetRender
+
+private class Opt(val id: Long?, val label: String)
+
+private fun pathOf(n: NoteEntity, by: Map<Long, NoteEntity>): String {
+    val parts = ArrayList<String>()
+    var c: NoteEntity? = n
+    var guard = 0
+    while (c != null && guard++ < 30) {
+        parts.add(c.displayTitle().ifBlank { "Без названия" })
+        c = c.parentId?.let { by[it] }
+    }
+    return parts.reversed().joinToString(" / ")
+}
+
+@Composable
+private fun PickDialog(title: String, options: List<Opt>, onPick: (Long?) -> Unit, onDismiss: () -> Unit) {
+    var q by remember { mutableStateOf("") }
+    val shown = remember(q, options) { options.filter { q.isBlank() || it.label.contains(q, ignoreCase = true) }.take(80) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(value = q, onValueChange = { q = it }, label = { Text("Поиск") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                LazyColumn(Modifier.heightIn(max = 340.dp).padding(top = 8.dp)) {
+                    items(shown) { o ->
+                        Text(o.label, Modifier.fillMaxWidth().clickable { onPick(o.id) }.padding(vertical = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+@Composable
+private fun Chips(items: List<String>, selected: Int, onSel: (Int) -> Unit) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.forEachIndexed { i, t -> FilterChip(selected = selected == i, onClick = { onSel(i) }, label = { Text(t) }) }
+    }
+}
+
+/** Настройка виджета рабочего стола: открывается после входа в приложение. */
+@Composable
+fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val isQuick = remember { AppWidgetManager.getInstance(ctx).getAppWidgetInfo(wid)?.provider?.className?.endsWith("QuickWidget") == true }
+    val old = remember { WidgetPrefs.get(ctx, wid) }
+    val kinds = listOf("folder" to "Папка", "note" to "Заметка", "dates" to "Сроки")
+    var kind by remember { mutableStateOf(if (isQuick) "quick" else old?.kind?.takeIf { it != "quick" } ?: "folder") }
+    var title by remember { mutableStateOf(old?.title ?: "") }
+    var folderId by remember { mutableStateOf(old?.folderId) }
+    var noteId by remember { mutableStateOf(old?.noteId) }
+    var count by remember { mutableStateOf(old?.count ?: 4) }
+    var theme by remember { mutableStateOf(old?.theme ?: 0) }
+    var size by remember { mutableStateOf(old?.size ?: 1) }
+    var add by remember { mutableStateOf(old?.add ?: true) }
+    var newest by remember { mutableStateOf(old?.newestFirst ?: true) }
+    var template by remember { mutableStateOf(old?.template ?: "") }
+    val qLabel = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.label ?: "" }) }
+    val qFolder = remember { mutableStateListOf<Long?>(*Array(3) { old?.quick?.getOrNull(it)?.folderId }) }
+    val qTpl = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.template ?: "" }) }
+    var notes by remember { mutableStateOf<List<NoteEntity>>(emptyList()) }
+    var pick by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { notes = vm.allNotesOnce() }
+    val by = remember(notes) { notes.associateBy { it.id } }
+    val folders = remember(notes) { listOf(Opt(null, "Главный экран (корень)")) + notes.filter { it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
+    val plainNotes = remember(notes) { notes.filter { !it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
+    fun folderLabel(id: Long?) = id?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "Главный экран (корень)"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isQuick) "Виджет: быстрый ввод" else "Виджет: список") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!isQuick) {
+                    Text("Что показывать", style = MaterialTheme.typography.labelLarge)
+                    Chips(kinds.map { it.second }, kinds.indexOfFirst { it.first == kind }.coerceAtLeast(0)) { kind = kinds[it].first }
+                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Заголовок (необязательно)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    when (kind) {
+                        "folder" -> {
+                            OutlinedButton(onClick = { pick = "folder" }, modifier = Modifier.fillMaxWidth()) { Text("Папка: " + folderLabel(folderId)) }
+                            Text("Сколько строк", style = MaterialTheme.typography.labelLarge)
+                            Chips((2..6).map { it.toString() }, count - 2) { count = it + 2 }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Сначала недавно изменённые", Modifier.weight(1f))
+                                Switch(checked = newest, onCheckedChange = { newest = it })
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Кнопка «+» новая заметка", Modifier.weight(1f))
+                                Switch(checked = add, onCheckedChange = { add = it })
+                            }
+                            if (add) OutlinedTextField(value = template, onValueChange = { template = it }, label = { Text("Шаблон новой заметки") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                        }
+                        "note" -> OutlinedButton(onClick = { pick = "note" }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Заметка: " + (noteId?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "не выбрана"))
+                        }
+                        else -> {
+                            Text("Подписки, долги, даты и гарантии из модуля «Сроки и даты».", style = MaterialTheme.typography.bodySmall)
+                            Text("Сколько строк", style = MaterialTheme.typography.labelLarge)
+                            Chips((2..6).map { it.toString() }, count - 2) { count = it + 2 }
+                        }
+                    }
+                } else {
+                    Text("До трёх кнопок: нажатие сразу открывает новую заметку в выбранной папке. Пустое название — кнопки нет.", style = MaterialTheme.typography.bodySmall)
+                    for (i in 0..2) {
+                        Text("Кнопка ${i + 1}", style = MaterialTheme.typography.labelLarge)
+                        OutlinedTextField(value = qLabel[i], onValueChange = { qLabel[i] = it }, label = { Text("Название на кнопке") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedButton(onClick = { pick = "q$i" }, modifier = Modifier.fillMaxWidth()) { Text("Папка: " + folderLabel(qFolder[i])) }
+                        OutlinedTextField(value = qTpl[i], onValueChange = { qTpl[i] = it }, label = { Text("Шаблон (например «Расход: »)") }, minLines = 1, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                Text("Оформление", style = MaterialTheme.typography.labelLarge)
+                Chips(listOf("Как в системе", "Светлый", "Тёмный", "Прозрачный"), theme) { theme = it }
+                if (!isQuick) Chips(listOf("Мелкий текст", "Средний", "Крупный"), size) { size = it }
+                Text("Тексты на рабочем столе хранятся в зашифрованном виде; выключить их показ можно в Настройки → Виджеты.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val cfg = WidgetCfg(
+                    kind = kind, title = title.trim(), folderId = folderId, noteId = noteId, count = count, theme = theme, size = size, add = add,
+                    newestFirst = newest, template = template,
+                    quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it]) },
+                )
+                WidgetPrefs.put(ctx, wid, cfg)
+                WidgetRender.updateAll(ctx)
+                vm.refreshWidgets()
+                Toast.makeText(ctx, "Виджет настроен. Вернитесь на рабочий стол", Toast.LENGTH_LONG).show()
+                onDismiss()
+            }) { Text("Сохранить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+    when (val p = pick) {
+        "folder" -> PickDialog("Папка", folders, { folderId = it; pick = null }, { pick = null })
+        "note" -> PickDialog("Заметка", plainNotes, { noteId = it; pick = null }, { pick = null })
+        null -> {}
+        else -> {
+            val i = p.removePrefix("q").toInt()
+            PickDialog("Папка для кнопки", folders, { qFolder[i] = it; pick = null }, { pick = null })
+        }
+    }
+}
+
+/** Страница «Виджеты» в настройках. */
+@Composable
+fun WidgetSettingsSection(vm: AppViewModel) {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(WidgetPrefs.contentOn(ctx)) }
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Как добавить: долгое нажатие на рабочем столе → «Виджеты» → «МоиЗаметки». Есть два виджета: «список» (папка, одна заметка или ближайшие сроки) и «быстрый ввод» (кнопки новой заметки). Настройка открывается в приложении; изменить её позже — долгое нажатие на виджет → «Настроить», либо нажать на заголовок виджета.")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Показывать тексты заметок на рабочем столе", Modifier.weight(1f))
+            Switch(checked = on, onCheckedChange = {
+                on = it
+                WidgetPrefs.setContent(ctx, it)
+                if (it) vm.refreshWidgets() else {
+                    ru.stasoft.mynotes.widgets.WidgetStore.clear(ctx)
+                    WidgetRender.updateAll(ctx)
+                }
+            })
+        }
+        Text(
+            "Рабочий стол виден без пароля. Тексты для виджетов хранятся отдельно, зашифрованными ключом телефона, но любой, кто держит разблокированный телефон, их увидит. Если выключить показ, виджеты останутся только кнопками быстрого ввода.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(onClick = { vm.refreshWidgets(); Toast.makeText(ctx, "Виджеты обновляются", Toast.LENGTH_SHORT).show() }) { Text("Обновить виджеты сейчас") }
+        Text("Виджеты обновляются, когда вы выходите из приложения.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

@@ -26,6 +26,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
         <activity-alias
             android:name=".IconClassic"
@@ -132,6 +133,17 @@
             </intent-filter>
         </activity-alias>
 
+        <receiver android:name=".widgets.NotesWidget" android:exported="false" android:label="@string/widget_notes_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/notes_widget_info" />
+        </receiver>
+        <receiver android:name=".widgets.QuickWidget" android:exported="false" android:label="@string/widget_quick_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/quick_widget_info" />
+        </receiver>
+        <activity android:name=".widgets.WidgetConfigActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+        </activity>
         <receiver
             android:name=".reminders.ReminderReceiver"
             android:exported="false" />

@@ -419,6 +419,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             unlocked = true
             error = null
             refreshPath()
+            refreshWidgets()
             resumeEditingId?.let { id ->
                 resumeEditingId = null
                 db.notes().get(id)?.let { n ->
@@ -555,6 +556,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         dbFlow.value = null
         ru.stasoft.mynotes.data.PhotoStore.setKey(null)
         unlocked = false
+        widgetConfigId = null
         // Папка, выбор и поиск остаются, а тексты записей из памяти убираем: после входа они загрузятся заново.
         editing = null
         props = null
@@ -567,6 +569,68 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun onBackground() {
         backgroundedAt = System.currentTimeMillis()
+        refreshWidgets()
+    }
+
+    // ---------- виджеты рабочего стола ----------
+
+    private class WidgetAction(val action: String, val note: Long, val folder: Long?, val tpl: String, val wid: Int)
+
+    private var pendingWidget: WidgetAction? = null
+
+    /** Открыта ли настройка виджета (id виджета). */
+    var widgetConfigId by mutableStateOf<Int?>(null)
+
+    fun setWidgetIntent(i: android.content.Intent?) {
+        val a = i?.action ?: return
+        if (!a.startsWith("ru.stasoft.mynotes.widget.")) return
+        if (i.getStringExtra("tk") != ru.stasoft.mynotes.widgets.WidgetPrefs.token(app)) return
+        pendingWidget = WidgetAction(a, i.getLongExtra("note", -1L), i.getLongExtra("folder", -1L).takeIf { it >= 0 }, i.getStringExtra("tpl") ?: "", i.getIntExtra("wid", -1))
+        i.action = null
+    }
+
+    /** Выполняет нажатие виджета, как только приложение открыто (после входа). */
+    fun runWidgetAction() {
+        val p = pendingWidget ?: return
+        if (!unlocked) return
+        pendingWidget = null
+        when (p.action) {
+            ru.stasoft.mynotes.widgets.ACTION_OPEN -> if (p.note >= 0) openById(p.note)
+            ru.stasoft.mynotes.widgets.ACTION_NEW -> newNoteIn(p.folder, p.tpl)
+            ru.stasoft.mynotes.widgets.ACTION_CONFIG -> if (p.wid >= 0) widgetConfigId = p.wid
+        }
+    }
+
+    /** Новая заметка в папке [parent] (null — корень) с готовым текстом; сразу открывается редактор. */
+    fun newNoteIn(parent: Long?, body: String) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val p = parent?.takeIf { dao.get(it)?.isFolder == true }
+            val now = System.currentTimeMillis()
+            val id = dao.insert(NoteEntity(parentId = p, body = body, sortIndex = dao.maxSort(p) + 1, createdAt = now, updatedAt = now))
+            query.value = ""
+            folderId.value = p
+            refreshPath()
+            justCreated = Created(id, p, true)
+            selectedId = id
+            dao.get(id)?.let {
+                editing = it
+                loadChain(it)
+            }
+        }
+    }
+
+    /** Пересчитывает данные виджетов, пока база открыта. */
+    fun refreshWidgets() {
+        if (dao() == null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val hasDates = ru.stasoft.mynotes.widgets.WidgetSync.ids(app).any { ru.stasoft.mynotes.widgets.WidgetPrefs.get(app, it)?.kind == "dates" }
+                val notes = allNotesOnce()
+                ru.stasoft.mynotes.widgets.WidgetSync.refresh(app, notes, if (hasDates) dueItems() else emptyList())
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun onForeground() {

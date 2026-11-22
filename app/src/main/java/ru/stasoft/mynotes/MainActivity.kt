@@ -26,6 +26,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         // Скриншоты разрешены, но в списке недавних приложений содержимое не показывается.
         if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
+        if (savedInstanceState == null) vm.setWidgetIntent(intent)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         setContent {
             MyNotesTheme(vm.themeMode) {
@@ -44,6 +45,13 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         vm.onForeground()
+        vm.runWidgetAction()
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        vm.setWidgetIntent(intent)
     }
 }
 

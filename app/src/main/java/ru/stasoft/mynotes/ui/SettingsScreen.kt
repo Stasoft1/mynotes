@@ -67,7 +67,7 @@ fun SettingsDialog(
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
                     "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
-                    "modules" to "Модули", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                    "modules" to "Модули", "widgets" to "Виджеты", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.IconButton(onClick = { if (page != null) page = null else onDismiss() }) {
@@ -84,6 +84,7 @@ fun SettingsDialog(
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
                             SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
+                            SettingsAction(Icons.Filled.Apps, "Виджеты", "Рабочий стол: список, заметка, быстрый ввод") { page = "widgets" }
                             if (MODS.on("budget") || MODS.on("health") || MODS.on("auto") || MODS.on("day") || MODS.on("giga") || MODS.on("route")) {
                                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                                 SettingsTitle("Настройки модулей")
@@ -166,6 +167,7 @@ fun SettingsDialog(
                         "budget" -> BudgetSettingsSection(vm)
                         "health" -> HealthSettingsSection(vm)
                         "auto" -> AutoSettingsSection(vm)
+                        "widgets" -> WidgetSettingsSection(vm)
                         "day" -> AutoDaySettingsSection(vm)
                         "giga" -> VoiceSettingsSection(vm)
                         "route" -> RouteSettingsSection()

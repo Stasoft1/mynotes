@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">МоиЗаметки</string>
+    <string name="widget_notes_desc">Папка, заметка или ближайшие сроки</string>
+    <string name="widget_quick_desc">Кнопки быстрой новой заметки</string>
+    <string name="widget_notes_name">МоиЗаметки: список</string>
+    <string name="widget_quick_name">МоиЗаметки: быстрый ввод</string>
 </resources>
