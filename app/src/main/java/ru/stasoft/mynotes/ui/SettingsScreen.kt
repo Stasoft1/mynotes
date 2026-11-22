@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FileUpload
@@ -46,6 +48,8 @@ import androidx.compose.ui.window.DialogProperties
 
 private val MODS = ru.stasoft.mynotes.modules.Modules
 
+private val MODULE_PAGES = listOf("budget", "health", "auto", "day", "giga", "route")
+
 /** Технические пункты: внешний вид, безопасность, данные, версия. */
 @Composable
 fun SettingsDialog(
@@ -63,15 +67,24 @@ fun SettingsDialog(
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
     }
     var page by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    Dialog(onDismissRequest = { if (page != null) page = null else onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // Назад: из вложенной страницы — на страницу раздела, из раздела — к списку, из списка — закрыть.
+    fun goBack() {
+        page = when (page) {
+            null -> { onDismiss(); null }
+            "icon", "widgets" -> "look"
+            "budget", "health", "auto", "day", "giga", "route" -> "mods"
+            else -> null
+        }
+    }
+    Dialog(onDismissRequest = { goBack() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
                     "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
-                    "modules" to "Модули", "widgets" to "Виджеты", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                    "modules" to "Модули", "mods" to "Настройки модулей", "widgets" to "Виджеты", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.IconButton(onClick = { if (page != null) page = null else onDismiss() }) {
+                    androidx.compose.material3.IconButton(onClick = { goBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
                     Text(pageTitles[page] ?: "Настройки", style = MaterialTheme.typography.titleLarge)
@@ -79,28 +92,29 @@ fun SettingsDialog(
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     when (page) {
                         null -> {
-                            SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема и стиль кнопок") { page = "look" }
-                            SettingsAction(Icons.Filled.Apps, "Значок приложения", "Шесть вариантов значка") { page = "icon" }
-                            SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Вход по отпечатку") { page = "security" }
+                            SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема, кнопки, значок, виджеты") { page = "look" }
+                            SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Пароль и вход по отпечатку") { page = "security" }
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
                             SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
-                            SettingsAction(Icons.Filled.Apps, "Виджеты", "Рабочий стол: список, заметка, быстрый ввод") { page = "widgets" }
-                            if (MODS.on("budget") || MODS.on("health") || MODS.on("auto") || MODS.on("day") || MODS.on("giga") || MODS.on("route")) {
-                                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                                SettingsTitle("Настройки модулей")
-                                if (MODS.on("budget")) SettingsAction(Icons.Filled.Savings, "Бюджет", "Категории и лимиты расходов") { page = "budget" }
-                                if (MODS.on("health")) SettingsAction(Icons.Filled.Info, "Показатели", "Список показателей здоровья") { page = "health" }
-                                if (MODS.on("auto")) SettingsAction(Icons.Filled.DirectionsCar, "Авто", "Машины, регламент ТО, привязка заметок") { page = "auto" }
-                                if (MODS.on("day")) SettingsAction(Icons.Filled.CalendarMonth, "Папка дня", "График и шаблоны для нового дня") { page = "day" }
-                                if (MODS.on("giga")) SettingsAction(Icons.Filled.Mic, "Голосовой ввод", "Ключ GigaChat для ИИ-разбора") { page = "giga" }
-                                if (MODS.on("route")) SettingsAction(Icons.Filled.Directions, "Маршрут", "Город для адресов без города") { page = "route" }
-                            }
+                            if (MODULE_PAGES.any { MODS.on(it) }) SettingsAction(Icons.Filled.Tune, "Настройки модулей", "Бюджет, авто, папка дня и другие") { page = "mods" }
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
                             SettingsAction(Icons.Filled.Info, "О программе", "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "") { page = "about" }
                         }
+                        "mods" -> {
+                            if (MODS.on("budget")) SettingsAction(Icons.Filled.Savings, "Бюджет", "Категории и лимиты расходов") { page = "budget" }
+                            if (MODS.on("health")) SettingsAction(Icons.Filled.Info, "Показатели", "Список показателей здоровья") { page = "health" }
+                            if (MODS.on("auto")) SettingsAction(Icons.Filled.DirectionsCar, "Авто", "Машины, регламент ТО, привязка заметок") { page = "auto" }
+                            if (MODS.on("day")) SettingsAction(Icons.Filled.CalendarMonth, "Папка дня", "График и шаблоны для нового дня") { page = "day" }
+                            if (MODS.on("giga")) SettingsAction(Icons.Filled.Mic, "Голосовой ввод", "Ключ GigaChat для ИИ-разбора") { page = "giga" }
+                            if (MODS.on("route")) SettingsAction(Icons.Filled.Directions, "Маршрут", "Город для адресов без города") { page = "route" }
+                            if (MODULE_PAGES.none { MODS.on(it) }) Text("Включите нужные модули в разделе «Модули»: у тех, что имеют настройки, они появятся здесь.", Modifier.padding(16.dp))
+                        }
                         "look" -> {
-                    SettingsTitle("Внешний вид")
+                    SettingsAction(Icons.Filled.Apps, "Значок приложения", "Шесть вариантов значка") { page = "icon" }
+                    SettingsAction(Icons.Filled.Widgets, "Виджеты", "Рабочий стол: список, заметка, быстрый ввод") { page = "widgets" }
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    SettingsTitle("Тема")
                     listOf(0 to "Как в системе", 1 to "Светлая", 2 to "Тёмная").forEach { (mode, label) ->
                         Row(
                             Modifier.fillMaxWidth().clickable { vm.setTheme(mode) }.padding(horizontal = 16.dp, vertical = 2.dp),
