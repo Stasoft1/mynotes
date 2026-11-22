@@ -395,12 +395,23 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Выключает пароль: проверяет текущий и переводит ключ базы под защиту ключа телефона. Возвращает ошибку или null. */
     suspend fun disablePassword(password: String): String? {
         val key = verifyPassword(password) ?: return "Неверный пароль"
+        finishDisable(key)
+        return null
+    }
+
+    /** Выключает пароль, подтвердив личность отпечатком (если пароль забыт). Возвращает ошибку или null. */
+    suspend fun disablePasswordWithBiometric(cipher: Cipher): String? {
+        val key = try { BiometricVault.unwrap(app, cipher) } catch (_: Exception) { null } ?: return "Не удалось подтвердить отпечатком"
+        finishDisable(key)
+        return null
+    }
+
+    private suspend fun finishDisable(key: ByteArray) {
         withContext(Dispatchers.Default) { Vault.makePasswordless(app, key) }
         key.fill(0)
         noPassword = true
         biometricEnabled = false
         message = "Пароль выключен: приложение открывается сразу"
-        return null
     }
 
     /** Включает пароль обратно. Возвращает ошибку или null. */

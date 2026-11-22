@@ -243,12 +243,35 @@ fun PasswordToggleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    if (turningOff) "Приложение будет открываться сразу, без пароля и автоблокировки. База останется зашифрованной, но ключ будет храниться в защищённой области телефона, а не вычисляться из пароля: любой, у кого в руках разблокированный телефон, увидит записи. Резервные копии в этом режиме тоже не защищены паролем. Введите текущий пароль, чтобы подтвердить."
+                    if (turningOff) (if (vm.biometricEnabled) "Подтвердите отпечатком (если пароль забыт) или введите текущий пароль. " else "") + "Приложение будет открываться сразу, без пароля и автоблокировки. База останется зашифрованной, но ключ будет храниться в защищённой области телефона, а не вычисляться из пароля: любой, у кого в руках разблокированный телефон, увидит записи. Резервные копии в этом режиме тоже не защищены паролем."
                     else "Придумайте пароль: им снова будет защищён вход. Если забыть его, восстановить данные нельзя.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text(if (turningOff) "Текущий пароль" else "Новый пароль") }, singleLine = true, visualTransformation = hide, modifier = Modifier.fillMaxWidth())
                 if (!turningOff) OutlinedTextField(value = pw2, onValueChange = { pw2 = it }, label = { Text("Повторите пароль") }, singleLine = true, visualTransformation = hide, modifier = Modifier.fillMaxWidth())
+                if (turningOff && vm.biometricEnabled) {
+                    val ctx = LocalContext.current
+                    OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                        val activity = ctx as? androidx.fragment.app.FragmentActivity
+                        val cipher = ru.stasoft.mynotes.crypto.BiometricVault.decryptCipher(ctx)
+                        if (cipher == null || activity == null) {
+                            err = "Отпечаток недоступен: введите пароль"
+                        } else {
+                            showBiometricPrompt(
+                                activity = activity, title = "Выключить пароль", negativeText = "Отмена", cipher = cipher,
+                                onSuccess = { c ->
+                                    busy = true
+                                    scope.launch {
+                                        val r = vm.disablePasswordWithBiometric(c)
+                                        busy = false
+                                        if (r == null) onDismiss() else err = r
+                                    }
+                                },
+                                onFailure = { err = it },
+                            )
+                        }
+                    }) { Text("Подтвердить отпечатком") }
+                }
                 err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
