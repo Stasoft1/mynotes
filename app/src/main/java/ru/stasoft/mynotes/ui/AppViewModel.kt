@@ -641,7 +641,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- виджеты рабочего стола ----------
 
-    private class WidgetAction(val action: String, val note: Long, val folder: Long?, val tpl: String, val wid: Int, val title: String, val daily: Boolean)
+    private class WidgetAction(val action: String, val note: Long, val folder: Long?, val tpl: String, val wid: Int, val title: String, val daily: Boolean, val snippet: Long)
 
     private var pendingWidget: WidgetAction? = null
 
@@ -652,7 +652,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val a = i?.action ?: return
         if (!a.startsWith("ru.stasoft.mynotes.widget.")) return
         if (i.getStringExtra("tk") != ru.stasoft.mynotes.widgets.WidgetPrefs.token(app)) return
-        pendingWidget = WidgetAction(a, i.getLongExtra("note", -1L), i.getLongExtra("folder", -1L).takeIf { it >= 0 }, i.getStringExtra("tpl") ?: "", i.getIntExtra("wid", -1), i.getStringExtra("title") ?: "", i.getBooleanExtra("daily", false))
+        pendingWidget = WidgetAction(a, i.getLongExtra("note", -1L), i.getLongExtra("folder", -1L).takeIf { it >= 0 }, i.getStringExtra("tpl") ?: "", i.getIntExtra("wid", -1), i.getStringExtra("title") ?: "", i.getBooleanExtra("daily", false), i.getLongExtra("snip", -1L))
         i.action = null
     }
 
@@ -663,18 +663,28 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         pendingWidget = null
         when (p.action) {
             ru.stasoft.mynotes.widgets.ACTION_OPEN -> if (p.note >= 0) openById(p.note)
-            ru.stasoft.mynotes.widgets.ACTION_NEW -> newNoteIn(p.folder, p.tpl, p.title, p.daily)
+            ru.stasoft.mynotes.widgets.ACTION_NEW -> newNoteIn(p.folder, p.tpl, p.title, p.daily, p.snippet)
             ru.stasoft.mynotes.widgets.ACTION_CONFIG -> if (p.wid >= 0) widgetConfigId = p.wid
         }
     }
 
     /** Новая заметка в папке [parent] (null — корень) с готовым текстом; сразу открывается редактор. */
-    fun newNoteIn(parent: Long?, body: String, title: String = "", daily: Boolean = false) {
+    fun newNoteIn(parent: Long?, body: String, title: String = "", daily: Boolean = false, snippetId: Long = -1L) {
         val dao = dao() ?: return
         viewModelScope.launch {
             val p = if (daily) dayFolder(parent) else parent?.takeIf { dao.get(it)?.isFolder == true }
             val now = System.currentTimeMillis()
-            val id = dao.insert(NoteEntity(parentId = p, title = title, body = body, sortIndex = dao.maxSort(p) + 1, createdAt = now, updatedAt = now))
+            val sn = if (snippetId >= 0) dao.allSnippetsOnce().firstOrNull { it.id == snippetId } else null
+            var text = body
+            var spans = ""
+            var name = title
+            if (sn != null) {
+                val (t0, sp) = expandTemplate(sn.text, sn.spansJson, p)
+                text = withCar(t0)
+                spans = sp
+                if (sn.title.isNotBlank()) name = expandSnippet(sn.title)
+            }
+            val id = dao.insert(NoteEntity(parentId = p, title = name, body = text, spansJson = spans, sortIndex = dao.maxSort(p) + 1, createdAt = now, updatedAt = now))
             query.value = ""
             folderId.value = p
             refreshPath()

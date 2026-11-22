@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,6 +104,9 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
     var newest by remember { mutableStateOf(old?.newestFirst ?: true) }
     var template by remember { mutableStateOf(old?.template ?: "") }
     var daily by remember { mutableStateOf(old?.daily ?: false) }
+    var snip by remember { mutableStateOf(old?.snippetId) }
+    val qSnip = remember { mutableStateListOf<Long?>(*Array(3) { old?.quick?.getOrNull(it)?.snippetId }) }
+    val snippets by vm.allSnippets.collectAsState()
     val qDaily = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.daily ?: false }) }
     val qLabel = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.label ?: "" }) }
     val qFolder = remember { mutableStateListOf<Long?>(*Array(3) { old?.quick?.getOrNull(it)?.folderId }) }
@@ -111,8 +115,7 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
     var pick by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { notes = vm.allNotesOnce() }
     val by = remember(notes) { notes.associateBy { it.id } }
-    val folders = remember(notes) { listOf(Opt(null, "Весь список (корень)")) + notes.filter { it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
-    val plainNotes = remember(notes) { notes.filter { !it.isFolder }.map { Opt(it.id, pathOf(it, by)) }.sortedBy { it.label.lowercase() } }
+    fun snipLabel(id: Long?) = id?.let { i -> snippets.firstOrNull { it.id == i }?.label } ?: "без шаблона"
     fun folderLabel(id: Long?) = id?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "Весь список (корень)"
 
     AlertDialog(
@@ -142,7 +145,7 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                                 Text("Кнопка «+» новая заметка", Modifier.weight(1f))
                                 Switch(checked = add, onCheckedChange = { add = it })
                             }
-                            if (add) OutlinedTextField(value = template, onValueChange = { template = it }, label = { Text("Шаблон новой заметки") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                            if (add) OutlinedButton(onClick = { pick = "tpl" }, modifier = Modifier.fillMaxWidth()) { Text("Шаблон: " + snipLabel(snip)) }
                         }
                         "note" -> OutlinedButton(onClick = { pick = "note" }, modifier = Modifier.fillMaxWidth()) {
                             Text("Заметка: " + (noteId?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "не выбрана"))
@@ -163,7 +166,7 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                             Switch(checked = qDaily[i], onCheckedChange = { qDaily[i] = it })
                         }
                         OutlinedButton(onClick = { pick = "q$i" }, modifier = Modifier.fillMaxWidth()) { Text((if (qDaily[i]) "Родительская папка: " else "Папка: ") + folderLabel(qFolder[i])) }
-                        OutlinedTextField(value = qTpl[i], onValueChange = { qTpl[i] = it }, label = { Text("Шаблон (например «Расход: »)") }, minLines = 1, modifier = Modifier.fillMaxWidth())
+                        OutlinedButton(onClick = { pick = "t$i" }, modifier = Modifier.fillMaxWidth()) { Text("Шаблон: " + snipLabel(qSnip[i])) }
                     }
                 }
                 Text("Оформление", style = MaterialTheme.typography.labelLarge)
@@ -177,8 +180,8 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                 val cfg = WidgetCfg(
                     kind = kind, title = title.trim(), folderId = folderId, noteId = noteId, count = count, theme = theme, size = size, add = add,
                     newestFirst = newest, template = template,
-                    quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it], qDaily[it]) },
-                    daily = daily,
+                    quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it], qDaily[it], qSnip[it]) },
+                    daily = daily, snippetId = snip,
                 )
                 WidgetPrefs.put(ctx, wid, cfg)
                 WidgetRender.updateAll(ctx)
@@ -189,15 +192,58 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+    val tplOpts = listOf(Opt(null, "Без шаблона")) + snippets.map { Opt(it.id, it.label) }
     when (val p = pick) {
-        "folder" -> PickDialog("Папка", folders, { folderId = it; pick = null }, { pick = null })
-        "note" -> PickDialog("Заметка", plainNotes, { noteId = it; pick = null }, { pick = null })
+        "folder" -> TreePickDialog("Папка", notes, true, folderId, { folderId = it; pick = null }, { pick = null })
+        "note" -> TreePickDialog("Заметка", notes, false, noteId?.let { by[it]?.parentId }, { noteId = it; pick = null }, { pick = null })
+        "tpl" -> PickDialog("Шаблон новой заметки", tplOpts, { snip = it; pick = null }, { pick = null })
         null -> {}
         else -> {
-            val i = p.removePrefix("q").toInt()
-            PickDialog("Папка для кнопки", folders, { qFolder[i] = it; pick = null }, { pick = null })
+            val i = p.substring(1).toInt()
+            if (p.startsWith("t")) PickDialog("Шаблон для кнопки", tplOpts, { qSnip[i] = it; pick = null }, { pick = null })
+            else TreePickDialog("Папка для кнопки", notes, true, qFolder[i], { qFolder[i] = it; pick = null }, { pick = null })
         }
     }
+}
+
+/**
+ * Выбор папки (или заметки) по дереву: заходим вглубь нажатием на папку, «Выбрать эту папку» берёт открытую.
+ * [start] — с какой папки начать (null — с корня). В режиме заметок нажатие на заметку выбирает её.
+ */
+@Composable
+private fun TreePickDialog(title: String, notes: List<NoteEntity>, foldersOnly: Boolean, start: Long?, onPick: (Long?) -> Unit, onDismiss: () -> Unit) {
+    val by = remember(notes) { notes.associateBy { it.id } }
+    var cur by remember { mutableStateOf(start?.takeIf { by[it]?.isFolder == true }) }
+    val kids = remember(notes, cur, foldersOnly) {
+        notes.filter { it.parentId == cur && (it.isFolder || !foldersOnly) }
+            .sortedWith(compareBy<NoteEntity>({ !it.isFolder }, { it.sortIndex }, { it.displayTitle().lowercase() }))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(cur?.let { by[it]?.let { n -> pathOf(n, by) } } ?: "Главный экран", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                LazyColumn(Modifier.heightIn(max = 360.dp).padding(top = 8.dp)) {
+                    if (cur != null) item {
+                        Text("⬆  Наверх", Modifier.fillMaxWidth().clickable { cur = by[cur]?.parentId }.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.primary)
+                        HorizontalDivider()
+                    }
+                    if (kids.isEmpty()) item { Text(if (foldersOnly) "Вложенных папок нет" else "Пусто", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall) }
+                    items(kids) { n ->
+                        val name = n.displayTitle().ifBlank { "Без названия" }
+                        Text(
+                            (if (n.isFolder) "📁  " else "📝  ") + name + (if (n.isFolder) "   ›" else ""),
+                            Modifier.fillMaxWidth().clickable { if (n.isFolder) cur = n.id else onPick(n.id) }.padding(vertical = 12.dp),
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = { if (foldersOnly) TextButton(onClick = { onPick(cur) }) { Text("Выбрать эту папку") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 /** Страница «Виджеты» в настройках. */

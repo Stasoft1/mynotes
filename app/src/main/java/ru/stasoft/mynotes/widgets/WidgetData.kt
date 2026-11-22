@@ -13,7 +13,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Кнопка виджета «Быстрый ввод». */
-class QuickBtn(val label: String, val folderId: Long?, val template: String, val daily: Boolean = false)
+class QuickBtn(val label: String, val folderId: Long?, val template: String, val daily: Boolean = false, val snippetId: Long? = null)
 
 /** Настройки одного виджета. kind: folder, note, dates, quick. theme: 0 авто, 1 светлая, 2 тёмная, 3 прозрачная. size: 0..2. */
 class WidgetCfg(
@@ -30,14 +30,16 @@ class WidgetCfg(
     val quick: List<QuickBtn> = emptyList(),
     /** Папка дня: [folderId] — родительская, а работать нужно с папкой сегодняшней даты внутри неё. */
     val daily: Boolean = false,
+    /** Шаблон новой заметки из списка шаблонов приложения. */
+    val snippetId: Long? = null,
 ) {
     fun toJson(): String = JSONObject().apply {
         put("kind", kind); put("title", title); put("count", count); put("theme", theme); put("size", size)
-        put("add", add); put("newest", newestFirst); put("template", template); put("daily", daily)
+        put("add", add); put("newest", newestFirst); put("template", template); put("daily", daily); snippetId?.let { put("snip", it) }
         folderId?.let { put("folder", it) }
         noteId?.let { put("note", it) }
         put("quick", JSONArray().apply {
-            quick.forEach { q -> put(JSONObject().put("l", q.label).put("t", q.template).put("d", q.daily).apply { q.folderId?.let { put("f", it) } }) }
+            quick.forEach { q -> put(JSONObject().put("l", q.label).put("t", q.template).put("d", q.daily).apply { q.folderId?.let { put("f", it) }; q.snippetId?.let { put("s", it) } }) }
         })
     }.toString()
 
@@ -50,8 +52,8 @@ class WidgetCfg(
                 folderId = if (o.has("folder")) o.getLong("folder") else null,
                 noteId = if (o.has("note")) o.getLong("note") else null,
                 count = o.optInt("count", 4).coerceIn(2, 6), theme = o.optInt("theme", 0), size = o.optInt("size", 1).coerceIn(0, 2),
-                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"), daily = o.optBoolean("daily", false),
-                quick = (0 until qa.length()).map { i -> qa.getJSONObject(i).let { q -> QuickBtn(q.optString("l"), if (q.has("f")) q.getLong("f") else null, q.optString("t"), q.optBoolean("d", false)) } },
+                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"), daily = o.optBoolean("daily", false), snippetId = if (o.has("snip")) o.getLong("snip") else null,
+                quick = (0 until qa.length()).map { i -> qa.getJSONObject(i).let { q -> QuickBtn(q.optString("l"), if (q.has("f")) q.getLong("f") else null, q.optString("t"), q.optBoolean("d", false), if (q.has("s")) q.getLong("s") else null) } },
             )
         } catch (_: Exception) {
             null
