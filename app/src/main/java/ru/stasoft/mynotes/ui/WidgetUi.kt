@@ -252,10 +252,12 @@ fun PasswordToggleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 if (turningOff && vm.biometricEnabled) {
                     val ctx = LocalContext.current
                     OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-                        val activity = ctx as? androidx.fragment.app.FragmentActivity
+                        val activity = generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is androidx.fragment.app.FragmentActivity } as? androidx.fragment.app.FragmentActivity
                         val cipher = ru.stasoft.mynotes.crypto.BiometricVault.decryptCipher(ctx)
-                        if (cipher == null || activity == null) {
-                            err = "Отпечаток недоступен: введите пароль"
+                        if (activity == null) {
+                            err = "Не удалось показать запрос отпечатка: введите пароль"
+                        } else if (cipher == null) {
+                            err = "Ключ отпечатка недоступен: введите пароль"
                         } else {
                             showBiometricPrompt(
                                 activity = activity, title = "Выключить пароль", negativeText = "Отмена", cipher = cipher,
