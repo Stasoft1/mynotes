@@ -1,7 +1,12 @@
 package ru.stasoft.mynotes.crypto
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -24,17 +29,103 @@ object Vault {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun isSetup(ctx: Context): Boolean = prefs(ctx).contains("wrapped")
+    fun isSetup(ctx: Context): Boolean = prefs(ctx).contains("wrapped") || prefs(ctx).contains("dev_wrapped")
+
+    /** Режим без пароля: мастер-ключ лежит под защитой ключа Android Keystore, база открывается сразу. */
+    fun isPasswordless(ctx: Context): Boolean = prefs(ctx).contains("dev_wrapped")
+
+    private const val DEV_ALIAS = "mynotes_device_key"
+
+    private fun devKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(DEV_ALIAS, null) as? SecretKey)?.let { return it }
+        val g = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        g.init(
+            KeyGenParameterSpec.Builder(DEV_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).setKeySize(256).build(),
+        )
+        return g.generateKey()
+    }
+
+    private fun deviceWrap(ctx: Context, master: ByteArray) {
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, devKey())
+        val w = c.doFinal(master)
+        prefs(ctx).edit().putString("dev_wrapped", b64(w)).putString("dev_iv", b64(c.iv)).commit()
+    }
+
+    /** Мастер-ключ в режиме без пароля или null, если ключ телефона недоступен. */
+    fun deviceUnlock(ctx: Context): ByteArray? = try {
+        val p = prefs(ctx)
+        val w = unb64(p.getString("dev_wrapped", null) ?: return null)
+        val iv = unb64(p.getString("dev_iv", null) ?: return null)
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.DECRYPT_MODE, devKey(), GCMParameterSpec(128, iv))
+        c.doFinal(w)
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Первый запуск без пароля. */
+    fun setupPasswordless(ctx: Context): ByteArray {
+        val master = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        deviceWrap(ctx, master)
+        return master
+    }
+
+    /** Переводит базу в режим без пароля: [master] — ключ, полученный по паролю. */
+    fun makePasswordless(ctx: Context, master: ByteArray) {
+        deviceWrap(ctx, master)
+        prefs(ctx).edit().remove("salt").remove("iv").remove("wrapped").remove("fails").remove("lastFail").commit()
+        BiometricVault.disable(ctx)
+    }
+
+    /** Снова включает пароль на тот же ключ базы (перешифровывать базу не нужно). */
+    fun makePassword(ctx: Context, password: CharArray): Boolean {
+        val master = deviceUnlock(ctx) ?: return false
+        wrapWithPassword(ctx, master, password)
+        prefs(ctx).edit().remove("dev_wrapped").remove("dev_iv").commit()
+        try {
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(DEV_ALIAS)
+        } catch (_: Exception) {
+        }
+        master.fill(0)
+        return true
+    }
+
+    /** Ключ телефона из резервной копии: в копии режим без пароля хранится открытым ключом, здесь он закрепляется заново. */
+    fun finishRestore(ctx: Context) {
+        val p = prefs(ctx)
+        val plain = p.getString("plain_master", null)
+        if (plain != null) {
+            try {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(DEV_ALIAS)
+            } catch (_: Exception) {
+            }
+            val m = unb64(plain)
+            deviceWrap(ctx, m)
+            m.fill(0)
+            p.edit().remove("plain_master").commit()
+        }
+    }
+
+    /** Для резервной копии: открытый мастер-ключ в режиме без пароля, иначе null. */
+    fun masterForBackup(ctx: Context): String? = if (isPasswordless(ctx)) deviceUnlock(ctx)?.let { b64(it) } else null
 
     fun minPasswordLength(): Int = MIN_PASSWORD
 
     /** Создаёт новый мастер-ключ под пароль. Возвращает ключ; вызывающий обязан затереть его после открытия базы. */
     fun setup(ctx: Context, password: CharArray): ByteArray {
         require(password.size >= MIN_PASSWORD) { "Пароль слишком короткий" }
+        val master = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        wrapWithPassword(ctx, master, password)
+        return master
+    }
+
+    private fun wrapWithPassword(ctx: Context, master: ByteArray, password: CharArray) {
         val rnd = SecureRandom()
         val salt = ByteArray(16).also { rnd.nextBytes(it) }
         val iv = ByteArray(12).also { rnd.nextBytes(it) }
-        val master = ByteArray(32).also { rnd.nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, derive(password, salt), GCMParameterSpec(128, iv))
         val wrapped = cipher.doFinal(master)
@@ -44,7 +135,6 @@ object Vault {
             .putString("wrapped", b64(wrapped))
             .putInt("fails", 0)
             .commit()
-        return master
     }
 
     /** Возвращает мастер-ключ или null, если пароль неверный. */

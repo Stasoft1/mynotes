@@ -365,7 +365,7 @@ fun TreeScreen(vm: AppViewModel) {
                                 showSettings = true
                             },
                         )
-                        DropdownMenuItem(
+                        if (!vm.noPassword) DropdownMenuItem(
                             text = { Text("Заблокировать") },
                             onClick = {
                                 menuOpen = false

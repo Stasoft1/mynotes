@@ -69,12 +69,14 @@ object BackupManager {
         // Связка ключей: всё, кроме данных отпечатка (он привязан к этому телефону).
         val arr = JSONArray()
         for ((k, v) in ctx.getSharedPreferences("vault", Context.MODE_PRIVATE).all) {
-            if (k.startsWith("bio_") || v == null) continue
+            if (k.startsWith("bio_") || k.startsWith("dev_") || k == "plain_master" || v == null) continue
             val t = when (v) {
                 is String -> "s"; is Int -> "i"; is Long -> "l"; is Boolean -> "b"; is Float -> "f"; else -> continue
             }
             arr.put(JSONObject().put("k", k).put("t", t).put("v", v.toString()))
         }
+        // Без пароля ключ телефона на другое устройство не перенести: в копию кладётся сам мастер-ключ (копия тоже без пароля).
+        ru.stasoft.mynotes.crypto.Vault.masterForBackup(ctx)?.let { arr.put(JSONObject().put("k", "plain_master").put("t", "s").put("v", it)) }
         zip.putNextEntry(ZipEntry("vault.json"))
         zip.write(arr.toString().toByteArray())
         zip.closeEntry()
@@ -237,6 +239,7 @@ object BackupManager {
                 }
             }
             if (!ed.commit()) throw IllegalStateException("не удалось записать ключи")
+            ru.stasoft.mynotes.crypto.Vault.finishRestore(ctx)
         } finally {
             tmpDir.deleteRecursively()
         }

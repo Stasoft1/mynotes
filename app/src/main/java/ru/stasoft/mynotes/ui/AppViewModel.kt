@@ -76,6 +76,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     var needSetup by mutableStateOf(!Vault.isSetup(app))
         private set
+    /** База открывается без пароля (ключ под защитой ключа телефона). */
+    var noPassword by mutableStateOf(Vault.isPasswordless(app))
+        private set
     var busy by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -360,6 +363,58 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ---------- вход ----------
 
+    init {
+        if (Vault.isPasswordless(app)) autoOpen()
+    }
+
+    /** Режим без пароля: открываем базу ключом телефона сразу. */
+    fun autoOpen() {
+        if (busy || unlocked) return
+        busy = true
+        error = null
+        viewModelScope.launch {
+            val key = withContext(Dispatchers.Default) { Vault.deviceUnlock(app) }
+            if (key == null) {
+                error = "Ключ телефона недоступен, открыть базу без пароля не удалось. Восстановите данные из резервной копии."
+                busy = false
+            } else openWith(key)
+        }
+    }
+
+    /** Первый запуск: работать без пароля. */
+    fun setupWithoutPassword() {
+        if (busy) return
+        busy = true
+        viewModelScope.launch {
+            val key = withContext(Dispatchers.Default) { Vault.setupPasswordless(app) }
+            noPassword = true
+            openWith(key)
+        }
+    }
+
+    /** Выключает пароль: проверяет текущий и переводит ключ базы под защиту ключа телефона. Возвращает ошибку или null. */
+    suspend fun disablePassword(password: String): String? {
+        val key = verifyPassword(password) ?: return "Неверный пароль"
+        withContext(Dispatchers.Default) { Vault.makePasswordless(app, key) }
+        key.fill(0)
+        noPassword = true
+        biometricEnabled = false
+        message = "Пароль выключен: приложение открывается сразу"
+        return null
+    }
+
+    /** Включает пароль обратно. Возвращает ошибку или null. */
+    suspend fun enablePassword(password: String, confirm: String): String? {
+        if (password.length < Vault.minPasswordLength()) return "Пароль должен быть не короче ${Vault.minPasswordLength()} символов"
+        if (password != confirm) return "Пароли не совпадают"
+        val chars = password.toCharArray()
+        val ok = withContext(Dispatchers.Default) { try { Vault.makePassword(app, chars) } finally { chars.fill('\u0000') } }
+        if (!ok) return "Не удалось включить пароль: ключ телефона недоступен"
+        noPassword = false
+        message = "Пароль включён"
+        return null
+    }
+
     fun submitPassword(password: String, confirm: String?) {
         if (busy) return
         error = null
@@ -548,7 +603,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Что была открыта на экране при блокировке: после входа возвращаем человека на то же место. */
     private var resumeEditingId: Long? = null
 
-    fun lock() {
+    fun lock(force: Boolean = false) {
+        if (noPassword && !force) return
         val db = dbFlow.value
         reminderJob?.cancel()
         reminderJob = null

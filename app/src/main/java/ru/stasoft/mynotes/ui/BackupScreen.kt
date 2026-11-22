@@ -126,7 +126,7 @@ fun BackupDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         scope.launch {
             busy = true
             status = null
-            vm.lock()
+            vm.lock(force = true)
             val err = withContext(Dispatchers.IO) {
                 try {
                     val s = open() ?: throw IllegalStateException("файл недоступен")

@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -126,7 +127,25 @@ fun SettingsDialog(
                         }
                         "security" -> {
                     SettingsTitle("Безопасность")
-                    if (vm.biometricAvailable()) {
+                    var pwDialog by remember { mutableStateOf(false) }
+                    Row(
+                        Modifier.fillMaxWidth().clickable { pwDialog = true }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Защита паролем", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (vm.noPassword) "Выключена: приложение открывается сразу" else "Включена: пароль при входе и автоблокировка",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(checked = !vm.noPassword, onCheckedChange = { pwDialog = true })
+                    }
+                    if (pwDialog) PasswordToggleDialog(vm) { pwDialog = false }
+                    if (vm.noPassword) {
+                        Text("Вход по отпечатку доступен, когда включён пароль.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    } else if (vm.biometricAvailable()) {
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable { if (vm.biometricEnabled) vm.disableBiometric() else onBioOn() }

@@ -137,6 +137,12 @@ fun LockScreen(vm: AppViewModel) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text("МоиЗаметки", style = MaterialTheme.typography.headlineLarge)
+        if (vm.noPassword && !vm.needSetup) {
+            vm.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
+            if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+            else AppButton(text = "Открыть", onClick = { vm.autoOpen() }, modifier = Modifier.padding(top = 16.dp))
+            return@Column
+        }
         Text(
             if (vm.needSetup) "Придумайте пароль. Им шифруется вся база. Если забыть его, восстановить данные нельзя."
             else "Введите пароль",
@@ -189,6 +195,14 @@ fun LockScreen(vm: AppViewModel) {
                 }
             }
             if (vm.busy) CircularProgressIndicator(modifier = Modifier.padding(start = 16.dp))
+        }
+        if (vm.needSetup) {
+            androidx.compose.material3.TextButton(onClick = { vm.setupWithoutPassword() }, enabled = !vm.busy, modifier = Modifier.padding(top = 8.dp)) { Text("Продолжить без пароля") }
+            Text(
+                "Без пароля приложение открывается сразу. База всё равно зашифрована ключом, который хранится в защищённой области телефона, но любой, у кого в руках разблокированный телефон, увидит записи. Пароль можно включить позже в настройках.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

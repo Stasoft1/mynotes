@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
 import ru.stasoft.mynotes.widgets.QuickBtn
@@ -224,4 +225,43 @@ fun WidgetSettingsSection(vm: AppViewModel) {
         OutlinedButton(onClick = { vm.refreshWidgets(); Toast.makeText(ctx, "Виджеты обновляются", Toast.LENGTH_SHORT).show() }) { Text("Обновить виджеты сейчас") }
         Text("Виджеты обновляются, когда вы выходите из приложения.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** Включение и выключение пароля (Настройки → Безопасность). */
+@Composable
+fun PasswordToggleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    val turningOff = !vm.noPassword
+    var pw by remember { mutableStateOf("") }
+    var pw2 by remember { mutableStateOf("") }
+    var err by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val hide = androidx.compose.ui.text.input.PasswordVisualTransformation()
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(if (turningOff) "Выключить пароль?" else "Включить пароль") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (turningOff) "Приложение будет открываться сразу, без пароля и автоблокировки. База останется зашифрованной, но ключ будет храниться в защищённой области телефона, а не вычисляться из пароля: любой, у кого в руках разблокированный телефон, увидит записи. Резервные копии в этом режиме тоже не защищены паролем. Введите текущий пароль, чтобы подтвердить."
+                    else "Придумайте пароль: им снова будет защищён вход. Если забыть его, восстановить данные нельзя.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text(if (turningOff) "Текущий пароль" else "Новый пароль") }, singleLine = true, visualTransformation = hide, modifier = Modifier.fillMaxWidth())
+                if (!turningOff) OutlinedTextField(value = pw2, onValueChange = { pw2 = it }, label = { Text("Повторите пароль") }, singleLine = true, visualTransformation = hide, modifier = Modifier.fillMaxWidth())
+                err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && pw.isNotEmpty(), onClick = {
+                busy = true
+                scope.launch {
+                    val r = if (turningOff) vm.disablePassword(pw) else vm.enablePassword(pw, pw2)
+                    busy = false
+                    if (r == null) onDismiss() else err = r
+                }
+            }) { Text(if (turningOff) "Выключить" else "Включить") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Отмена") } },
+    )
 }
