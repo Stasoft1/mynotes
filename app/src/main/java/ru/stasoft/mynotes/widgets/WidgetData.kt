@@ -32,10 +32,12 @@ class WidgetCfg(
     val daily: Boolean = false,
     /** Шаблон новой заметки из списка шаблонов приложения. */
     val snippetId: Long? = null,
+    /** Оформление панели быстрого ввода: 0 — простое, 1..6 — картинки (зелёный, неон, японский, кожа, пиксели, яркий). */
+    val style: Int = 0,
 ) {
     fun toJson(): String = JSONObject().apply {
         put("kind", kind); put("title", title); put("count", count); put("theme", theme); put("size", size)
-        put("add", add); put("newest", newestFirst); put("template", template); put("daily", daily); snippetId?.let { put("snip", it) }
+        put("add", add); put("newest", newestFirst); put("template", template); put("daily", daily); put("style", style); snippetId?.let { put("snip", it) }
         folderId?.let { put("folder", it) }
         noteId?.let { put("note", it) }
         put("quick", JSONArray().apply {
@@ -52,7 +54,7 @@ class WidgetCfg(
                 folderId = if (o.has("folder")) o.getLong("folder") else null,
                 noteId = if (o.has("note")) o.getLong("note") else null,
                 count = o.optInt("count", 4).coerceIn(2, 6), theme = o.optInt("theme", 0), size = o.optInt("size", 1).coerceIn(0, 2),
-                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"), daily = o.optBoolean("daily", false), snippetId = if (o.has("snip")) o.getLong("snip") else null,
+                add = o.optBoolean("add", true), newestFirst = o.optBoolean("newest", true), template = o.optString("template"), daily = o.optBoolean("daily", false), snippetId = if (o.has("snip")) o.getLong("snip") else null, style = o.optInt("style", 0).coerceIn(0, 6),
                 quick = (0 until qa.length()).map { i -> qa.getJSONObject(i).let { q -> QuickBtn(q.optString("l"), if (q.has("f")) q.getLong("f") else null, q.optString("t"), q.optBoolean("d", false), if (q.has("s")) q.getLong("s") else null) } },
             )
         } catch (_: Exception) {

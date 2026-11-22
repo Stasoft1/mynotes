@@ -62,12 +62,41 @@ object WidgetRender {
         m.updateAppWidget(wid, if (quickProvider) quick(ctx, wid, cfg) else main(ctx, wid, cfg))
     }
 
+    private val STYLE_LAYOUTS = intArrayOf(
+        R.layout.widget_style_green, R.layout.widget_style_neon, R.layout.widget_style_japan,
+        R.layout.widget_style_leather, R.layout.widget_style_pixel, R.layout.widget_style_pop,
+    )
+
     private fun quick(ctx: Context, wid: Int, cfg: WidgetCfg?): RemoteViews {
+        val ids = intArrayOf(R.id.q0, R.id.q1, R.id.q2)
+        val style = cfg?.style ?: 0
+        if (style in 1..6) {
+            // Оформление-картинка: три кнопки стоят на своих местах рисунка, подписи свои у каждой.
+            val rv = RemoteViews(ctx.packageName, STYLE_LAYOUTS[style - 1])
+            val q = cfg?.quick.orEmpty()
+            if (q.none { it.label.isNotBlank() }) {
+                rv.setTextViewText(ids[1], "Настроить")
+                rv.setOnClickPendingIntent(R.id.root, configure(ctx, wid))
+                rv.setViewVisibility(ids[0], View.INVISIBLE)
+                rv.setViewVisibility(ids[2], View.INVISIBLE)
+                return rv
+            }
+            for (i in 0..2) {
+                val b = q.getOrNull(i)
+                if (b == null || b.label.isBlank()) {
+                    rv.setViewVisibility(ids[i], View.INVISIBLE)
+                } else {
+                    rv.setViewVisibility(ids[i], View.VISIBLE)
+                    rv.setTextViewText(ids[i], b.label)
+                    rv.setOnClickPendingIntent(ids[i], newNote(ctx, wid, i, b.folderId, b.template, b.label, b.daily, b.snippetId))
+                }
+            }
+            return rv
+        }
         val rv = RemoteViews(ctx.packageName, R.layout.widget_quick)
         val c = colors(ctx, cfg?.theme ?: 0)
         rv.setInt(R.id.root, "setBackgroundResource", c.bg)
         val btns = cfg?.quick?.filter { it.label.isNotBlank() }.orEmpty().take(3)
-        val ids = intArrayOf(R.id.q0, R.id.q1, R.id.q2)
         ids.forEach { rv.setViewVisibility(it, View.GONE) }
         if (btns.isEmpty()) {
             rv.setViewVisibility(R.id.empty, View.VISIBLE)

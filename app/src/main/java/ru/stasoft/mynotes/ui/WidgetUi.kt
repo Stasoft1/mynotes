@@ -105,6 +105,7 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
     var template by remember { mutableStateOf(old?.template ?: "") }
     var daily by remember { mutableStateOf(old?.daily ?: false) }
     var snip by remember { mutableStateOf(old?.snippetId) }
+    var style by remember { mutableStateOf(old?.style ?: 0) }
     val qSnip = remember { mutableStateListOf<Long?>(*Array(3) { old?.quick?.getOrNull(it)?.snippetId }) }
     val snippets by vm.allSnippets.collectAsState()
     val qDaily = remember { mutableStateListOf(*Array(3) { old?.quick?.getOrNull(it)?.daily ?: false }) }
@@ -169,8 +170,15 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                         OutlinedButton(onClick = { pick = "t$i" }, modifier = Modifier.fillMaxWidth()) { Text("Шаблон: " + snipLabel(qSnip[i])) }
                     }
                 }
-                Text("Оформление", style = MaterialTheme.typography.labelLarge)
-                Chips(listOf("Как в системе", "Светлый", "Тёмный", "Прозрачный"), theme) { theme = it }
+                if (isQuick) {
+                    Text("Стиль панели", style = MaterialTheme.typography.labelLarge)
+                    Chips(listOf("Простой", "Зелёный", "Неон", "Японский", "Кожа", "Пиксели", "Яркий"), style) { style = it }
+                    if (style > 0) Text("Подписи на кнопках — ваши: слово, символ или смайлик (+, ✓, 🔍, ⛽, 💰). Заполните все три кнопки, пустая остаётся без подписи.", style = MaterialTheme.typography.bodySmall)
+                }
+                if (!isQuick || style == 0) {
+                    Text("Оформление", style = MaterialTheme.typography.labelLarge)
+                    Chips(listOf("Как в системе", "Светлый", "Тёмный", "Прозрачный"), theme) { theme = it }
+                }
                 if (!isQuick) Chips(listOf("Мелкий текст", "Средний", "Крупный"), size) { size = it }
                 Text("Тексты на рабочем столе хранятся в зашифрованном виде; выключить их показ можно в Настройки → Виджеты.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -181,7 +189,7 @@ fun WidgetConfigDialog(vm: AppViewModel, wid: Int, onDismiss: () -> Unit) {
                     kind = kind, title = title.trim(), folderId = folderId, noteId = noteId, count = count, theme = theme, size = size, add = add,
                     newestFirst = newest, template = template,
                     quick = (0..2).map { QuickBtn(qLabel[it].trim(), qFolder[it], qTpl[it], qDaily[it], qSnip[it]) },
-                    daily = daily, snippetId = snip,
+                    daily = daily, snippetId = snip, style = style,
                 )
                 WidgetPrefs.put(ctx, wid, cfg)
                 WidgetRender.updateAll(ctx)

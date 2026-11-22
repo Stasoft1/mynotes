@@ -8,5 +8,6 @@
     android:widgetCategory="home_screen"
     android:configure="ru.stasoft.mynotes.widgets.WidgetConfigActivity"
     android:widgetFeatures="reconfigurable|configuration_optional"
-    android:initialLayout="@layout/widget_quick"
+    android:initialLayout="@layout/widget_style_green"
+    android:previewImage="@drawable/wbg_neon"
     android:description="@string/widget_quick_desc"/>
