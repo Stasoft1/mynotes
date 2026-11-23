@@ -101,7 +101,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("wallpaper", n).apply()
     }
 
-    fun setWallpaperAlpha(percent: Int) {
+    fun changeWallpaperAlpha(percent: Int) {
         wallpaperAlpha = percent.coerceIn(10, 100)
         app.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit().putInt("wallpaper_alpha", wallpaperAlpha).apply()
     }

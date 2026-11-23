@@ -79,7 +79,7 @@ fun WallpaperSettingsSection(vm: AppViewModel) {
         Text("Прозрачность обоев: ${v.toInt()}%  (чем меньше, тем бледнее картинка)", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = v,
-            onValueChange = { v = it; vm.setWallpaperAlpha(it.toInt()) },
+            onValueChange = { v = it; vm.changeWallpaperAlpha(it.toInt()) },
             valueRange = 10f..100f,
         )
         Text("По умолчанию — 40%.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
