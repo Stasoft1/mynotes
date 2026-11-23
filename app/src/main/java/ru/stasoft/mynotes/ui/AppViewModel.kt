@@ -64,6 +64,7 @@ import ru.stasoft.mynotes.data.extractVoiceCommands
 import ru.stasoft.mynotes.data.resolveIconName
 import ru.stasoft.mynotes.importer.MtntImporter
 
+private const val DEFAULT_UTIL = "Электричество = кВт·ч = 6,5\nВода холодная = м³ = 45\nВода горячая = м³ = 230\nГаз = м³ = 7"
 private const val DEFAULT_HEALTH = "Вес = кг\nДавление = мм рт. ст.\nПульс = уд/мин\nСахар = ммоль/л\nТемпература = °C"
 
 private const val DEFAULT_BUDGET = "Продукты\nТранспорт\nДом\nЗдоровье\nОдежда\nСвязь\nРазвлечения\nПрочее"
@@ -1031,6 +1032,46 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     fun updateHealthText(t: String) {
         healthText = t
         uiPrefs().edit().putString("health_cfg", t).apply()
+    }
+
+    // ---------- коммунальные услуги ----------
+
+    var utilText by mutableStateOf(uiPrefs().getString("util_cfg", DEFAULT_UTIL) ?: DEFAULT_UTIL)
+        private set
+    var utilFixed by mutableStateOf(uiPrefs().getFloat("util_fixed", 0f).toDouble())
+        private set
+    var utilDay by mutableStateOf(uiPrefs().getInt("util_day", 25))
+        private set
+
+    fun updateUtilText(t: String) {
+        utilText = t
+        uiPrefs().edit().putString("util_cfg", t).apply()
+    }
+
+    fun updateUtilFixed(v: Double) {
+        utilFixed = v
+        uiPrefs().edit().putFloat("util_fixed", v.toFloat()).apply()
+    }
+
+    fun updateUtilDay(d: Int) {
+        utilDay = d.coerceIn(0, 31)
+        uiPrefs().edit().putInt("util_day", utilDay).apply()
+    }
+
+    /** За 3 дня до выбранного числа, если в этом месяце показаний ещё нет, напоминает их передать (раз в сутки). */
+    fun checkUtil() {
+        if (!Modules.on("util") || !unlocked || utilDay <= 0) return
+        val today = java.time.LocalDate.now()
+        if (today.dayOfMonth < utilDay - 3 || today.dayOfMonth > utilDay) return
+        if (uiPrefs().getString("util_notified", "") == today.toString()) return
+        viewModelScope.launch {
+            val notes = allNotesOnce()
+            val meters = ru.stasoft.mynotes.data.parseUtilMeters(utilText)
+            val done = meters.any { m -> ru.stasoft.mynotes.data.parseMeasures(notes, m.name).any { it.date.year == today.year && it.date.month == today.month } }
+            if (done || meters.isEmpty()) return@launch
+            uiPrefs().edit().putString("util_notified", today.toString()).apply()
+            ru.stasoft.mynotes.reminders.ReminderNotifier.showText(app, "Показания счётчиков", "Передайте показания до $utilDay числа", 2_000_003)
+        }
     }
 
     suspend fun allNotesOnce(): List<NoteEntity> {

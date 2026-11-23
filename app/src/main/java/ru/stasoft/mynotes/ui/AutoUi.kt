@@ -103,6 +103,13 @@ private fun CarDialog(vm: AppViewModel, car: CarEntity, onDismiss: () -> Unit) {
                             ).forEach { (n, km, mo) -> vm.saveServiceItem(ServiceItemEntity(carId = car.id, name = n, everyKm = km, everyMonths = mo)) }
                         }) { Text("Типовой набор") }
                     }
+                    Row {
+                        TextButton(onClick = {
+                            listOf(Triple("ОСАГО", 0, 12), Triple("Техосмотр", 0, 24), Triple("Смена шин", 0, 6)).forEach { (n, km, mo) ->
+                                if (items.none { it.name.equals(n, true) }) vm.saveServiceItem(ServiceItemEntity(carId = car.id, name = n, everyKm = km, everyMonths = mo))
+                            }
+                        }) { Text("Документы и сезон") }
+                    }
                 }
             }
         },
