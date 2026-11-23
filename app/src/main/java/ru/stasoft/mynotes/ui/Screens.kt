@@ -89,15 +89,29 @@ fun AppRoot(vm: AppViewModel) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        when {
-            !vm.unlocked -> LockScreen(vm)
-            vm.props != null -> PropertiesScreen(vm, vm.props!!)
-            vm.editing != null -> EditorScreen(vm, vm.editing!!)
-            vm.showReminders -> ReminderListScreen(vm)
-            else -> TreeScreen(vm)
+    val wpOn = vm.unlocked && vm.wallpaper in 1..WALLPAPERS.size
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (wpOn) androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(WALLPAPERS[vm.wallpaper - 1].res),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            alpha = vm.wallpaperAlpha / 100f,
+        )
+        androidx.compose.runtime.CompositionLocalProvider(LocalWallpaper provides wpOn) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = if (wpOn) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
+            ) {
+                when {
+                    !vm.unlocked -> LockScreen(vm)
+                    vm.props != null -> PropertiesScreen(vm, vm.props!!)
+                    vm.editing != null -> EditorScreen(vm, vm.editing!!)
+                    vm.showReminders -> ReminderListScreen(vm)
+                    else -> TreeScreen(vm)
+                }
+            }
         }
-        if (vm.unlocked) vm.widgetConfigId?.let { id -> WidgetConfigDialog(vm, id) { vm.widgetConfigId = null } }
     }
 }
 

@@ -261,6 +261,7 @@ fun TreeScreen(vm: AppViewModel) {
     }
 
     Scaffold(
+        containerColor = if (LocalWallpaper.current) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             if (vm.multi != null) MultiStrip(vm, items) else TopStrip {
@@ -769,14 +770,17 @@ private fun NoteRow(
 ) {
     val status = reminderStatus(note)
     val textColor = note.textColorArgb?.let { Color(it) }
+    val wp = LocalWallpaper.current
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (wp) Modifier.padding(horizontal = 8.dp, vertical = 2.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)) else Modifier)
             .background(
                 if (lifted) MaterialTheme.colorScheme.surfaceContainerHighest
                 else if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else rowBackground(note)
-                    ?: if (zebra) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) else Color.Transparent,
+                    ?: if (wp) MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
+                    else if (zebra) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f) else Color.Transparent,
             )
             .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick, onLongClick = onLongClick)
             .then(dragModifier)

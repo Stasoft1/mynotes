@@ -22,7 +22,7 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FileUpload
@@ -71,7 +71,7 @@ fun SettingsDialog(
     fun goBack() {
         page = when (page) {
             null -> { onDismiss(); null }
-            "icon", "widgets" -> "look"
+            "icon", "wallpaper" -> "look"
             "budget", "health", "auto", "day", "giga", "route" -> "mods"
             else -> null
         }
@@ -81,7 +81,7 @@ fun SettingsDialog(
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
                     "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
-                    "modules" to "Модули", "mods" to "Настройки модулей", "widgets" to "Виджеты", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                    "modules" to "Модули", "mods" to "Настройки модулей", "wallpaper" to "Обои", "budget" to "Бюджет", "health" to "Показатели", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.IconButton(onClick = { goBack() }) {
@@ -92,7 +92,7 @@ fun SettingsDialog(
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     when (page) {
                         null -> {
-                            SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема, кнопки, значок, виджеты") { page = "look" }
+                            SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема, кнопки, значок, обои") { page = "look" }
                             SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Пароль и вход по отпечатку") { page = "security" }
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
@@ -112,7 +112,7 @@ fun SettingsDialog(
                         }
                         "look" -> {
                     SettingsAction(Icons.Filled.Apps, "Значок приложения", "Шесть вариантов значка") { page = "icon" }
-                    SettingsAction(Icons.Filled.Widgets, "Виджеты", "Рабочий стол: список, заметка, быстрый ввод") { page = "widgets" }
+                    SettingsAction(Icons.Filled.Wallpaper, "Обои", if (vm.wallpaper in 1..WALLPAPERS.size) WALLPAPERS[vm.wallpaper - 1].title + " · " + vm.wallpaperAlpha + "%" else "Без обоев") { page = "wallpaper" }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     SettingsTitle("Тема")
                     listOf(0 to "Как в системе", 1 to "Светлая", 2 to "Тёмная").forEach { (mode, label) ->
@@ -200,7 +200,7 @@ fun SettingsDialog(
                         "budget" -> BudgetSettingsSection(vm)
                         "health" -> HealthSettingsSection(vm)
                         "auto" -> AutoSettingsSection(vm)
-                        "widgets" -> WidgetSettingsSection(vm)
+                        "wallpaper" -> WallpaperSettingsSection(vm)
                         "day" -> AutoDaySettingsSection(vm)
                         "giga" -> VoiceSettingsSection(vm)
                         "route" -> RouteSettingsSection()

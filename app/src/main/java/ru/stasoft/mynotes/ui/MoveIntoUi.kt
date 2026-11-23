@@ -73,3 +73,15 @@ fun MoveIntoDialog(vm: AppViewModel, note: NoteEntity, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }
+
+internal fun pathOf(n: NoteEntity, by: Map<Long, NoteEntity>): String {
+    val parts = ArrayList<String>()
+    var c: NoteEntity? = n
+    var guard = 0
+    while (c != null && guard++ < 30) {
+        parts.add(c.displayTitle().ifBlank { "Без названия" })
+        c = c.parentId?.let { by[it] }
+    }
+    return parts.reversed().joinToString(" / ")
+}
+

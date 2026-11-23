@@ -393,6 +393,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     }
 
     Scaffold(
+        containerColor = if (LocalWallpaper.current) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.background,
         topBar = {
             TopStrip {
                 StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { close() }
@@ -457,6 +458,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         Column(
             Modifier
                 .padding(padding)
+                .then(if (LocalWallpaper.current) Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)) else Modifier)
                 .imePadding()
                 .fillMaxSize(),
         ) {
