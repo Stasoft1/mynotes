@@ -14,8 +14,12 @@ private val CONTRACT_RE = Regex("Договор\\s*№?\\s*:?\\s*([\\p{L}\\p{N}*
 private val ADDR_RE = Regex("Адрес:\\s*(.*?)(?=,?\\s*(?:Парадная|Этаж|Квартира|Заявка)|$)")
 private val STREET_TYPES = Regex("(?<!\\p{L})(?:ул|ул\\.|улица|пр-кт|пр-т|пр|пр\\.|просп|проспект|бул|бульвар|наб|набережная|пер|переулок|ш|шоссе)(?!\\p{L})\\.?", RegexOption.IGNORE_CASE)
 
+/** Новый вид заявки: адрес, «Парадная · Этаж», тип работ, «Заявка N · Дог. M», услуга, комментарии. */
+private val NEW_REQ_RE = Regex("(?m)^\\s*Заявка\\s+(\\d+)\\s*(?:[·•|]\\s*Дог\\.?\\s*№?\\s*([\\p{L}\\p{N}*-]+))?")
+
 fun looksLikeRequest(text: String): Boolean =
-    Regex("Заявка:\\s*\\d+").containsMatchIn(text) || (text.contains("Данные клиента") && text.contains("Договор"))
+    NEW_REQ_RE.containsMatchIn(text) || Regex("Заявка:\\s*\\d+").containsMatchIn(text) ||
+        (text.contains("Данные клиента") && text.contains("Договор"))
 
 private fun normPhone(s: String): String {
     var d = s.filter { it == '+' || it.isDigit() || it in "хХxX*" }
@@ -43,7 +47,7 @@ private fun formatAddress(addrRaw: String, flatIn: String?): String {
 private fun vpFix(s: String): String =
     Regex("(?<!\\p{L})вп(?!\\p{L})", RegexOption.IGNORE_CASE).replace(s, "ВП")
 
-private fun norm(s0: String): String {
+private fun norm(s0: String, lowerAfterComma: Boolean = true): String {
     var t = vpFix(s0)
     t = Regex("Подкл\\.?\\s+интерн\\p{L}*", RegexOption.IGNORE_CASE).replace(t, "Подключение интернета")
     t = Regex("(?<!\\p{L})подкл\\.?(?!\\p{L})", RegexOption.IGNORE_CASE).replace(t, "подключение")
@@ -55,7 +59,7 @@ private fun norm(s0: String): String {
     t = Regex("(\\d+)\\s*ч(?!\\p{L})").replace(t, "$1 ч")
     t = Regex("(?<=[\\p{L}\\p{N}])\\(").replace(t, " (")
     t = Regex(",(?=\\p{L})").replace(t, ", ")
-    t = Regex(", ([А-ЯЁ])(?=[а-яё])").replace(t) { ", " + it.groupValues[1].lowercase() }
+    if (lowerAfterComma) t = Regex(", ([А-ЯЁ])(?=[а-яё])").replace(t) { ", " + it.groupValues[1].lowercase() }
     return t
 }
 
@@ -70,6 +74,7 @@ private fun fixWords(s: String): String {
 /** Разбор заявки из рабочей программы и раскладка по шаблону Ф1. skeleton — строки шаблона (если нет, порядок по умолчанию). */
 fun convertRequest(rawIn: String, skeleton: List<String>?): Converted? {
     if (!looksLikeRequest(rawIn)) return null
+    if (NEW_REQ_RE.containsMatchIn(rawIn)) return convertNewFormat(rawIn, skeleton)
     val raw = rawIn.replace("\r", "").replace(Regex("(?<=\\S)(?=Договор)"), "\n")
     val lines = raw.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -125,10 +130,17 @@ fun convertRequest(rawIn: String, skeleton: List<String>?): Converted? {
     if (speed.isEmpty()) Regex("(\\d+)\\s*мб", RegexOption.IGNORE_CASE).find(left)?.let { speed = it.groupValues[1] + " мбит" }
     val note = sentences.joinToString(" ") { if (it.endsWith(".")) it else "$it." }
 
-    val vals = mapOf(
-        "адрес" to address, "договор" to contract, "телефон" to phones.joinToString(", "),
-        "скорость" to speed, "примечание" to note, "wf name" to sw, "свитч" to sw, "порт" to port,
+    return render(
+        mapOf(
+            "адрес" to address, "договор" to contract, "телефон" to phones.joinToString(", "),
+            "скорость" to speed, "примечание" to note, "wf name" to sw, "свитч" to sw, "порт" to port,
+        ),
+        address, skeleton,
     )
+}
+
+/** Раскладка значений по строкам шаблона Ф1 (skeleton — строки шаблона; если нет, порядок по умолчанию). */
+private fun render(vals: Map<String, String>, address: String, skeleton: List<String>?): Converted {
     val sk = skeleton?.map { it.trimEnd() }?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() } ?: DEFAULT_F1
     val out = sk.mapNotNull { line ->
         val c = line.indexOf(':')
@@ -140,4 +152,94 @@ fun convertRequest(rawIn: String, skeleton: List<String>?): Converted? {
         else "$key: $v"
     }
     return Converted(address, out.joinToString("\n"))
+}
+
+// ---------------------------------------------------------------- новый формат заявки
+
+private fun decodeEntities(s: String): String =
+    s.replace("&quot;", "\"").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("\u00a0", " ")
+
+/** Строка «ЕСТЬ ДОП СЗ» → «Есть доп СЗ»: капслок в предложение, короткие аббревиатуры (до 2 букв) остаются заглавными. */
+private fun capsToSentence(s: String): String = Regex("(?<!\\p{L})[А-ЯЁ]{2,}(?:\\s+[А-ЯЁ]{2,})+(?!\\p{L})").replace(s) { m ->
+    val words = m.value.split(Regex("\\s+")).mapIndexed { i, w ->
+        if (w.length <= 2 || (i > 0 && w.length <= 2)) w else if (i == 0) sentenceCase(w) else w.lowercase()
+    }
+    words.joinToString(" ")
+}
+
+private val TARIFF_RE = Regex("(?<!\\p{L})тариф\\s*(\\d+)\\s*(?:мб|мбит)\\p{L}*\\s*/?\\s*,?\\s*(\\d+)\\s*(?:руб|р)\\p{L}*\\.?", RegexOption.IGNORE_CASE)
+
+private fun cleanSegment(seg0: String, onSpeed: (String) -> Unit): String {
+    var t = decodeEntities(seg0).replace(Regex("\\s+"), " ").trim()
+    t = t.replace(Regex("^[\"«»]+(?=[^\"«»]*$)"), "").replace(Regex("(?<=[^\"«»])[\"«»]+$"), "")
+    t = t.replace(Regex("\\s+,"), ",").trim().trim(',', '.').trim()
+    if (t.isEmpty()) return ""
+    t = norm(t, lowerAfterComma = false)
+    t = TARIFF_RE.replace(t) { m -> onSpeed(m.groupValues[1] + " мбит"); "тариф ${m.groupValues[1]} мбит / ${m.groupValues[2]} руб" }
+    t = Regex("(?<=\\S\\s)Подключение интернета").replace(t, "подключение интернета")
+    t = fixWords(capsToSentence(t))
+    val first = t.substringBefore(' ')
+    return if (first.all { it.isLetter() }) t.replaceFirstChar { it.uppercase() } else t
+}
+
+/** Заявка нового вида: адрес, «Парадная · Этаж», тип работ, «Заявка N · Дог. M», услуга, комментарии через «//», «Контактный номер:». */
+private fun convertNewFormat(rawIn: String, skeleton: List<String>?): Converted? {
+    val lines = decodeEntities(rawIn.replace("\r", "")).split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+    val ri = lines.indexOfFirst { NEW_REQ_RE.containsMatchIn(it) }
+    if (ri < 0) return null
+    val m = NEW_REQ_RE.find(lines[ri])!!
+    val requestNo = m.groupValues[1]
+    val contract = m.groupValues[2]
+    val head = lines.take(ri)
+    val addrRaw = head.firstOrNull { !it.startsWith("Парадная", true) } ?: ""
+    val porch = Regex("Парадная\\s*(\\d+)", RegexOption.IGNORE_CASE).find(head.joinToString(" "))?.groupValues?.get(1) ?: ""
+    val floor = Regex("Этаж\\s*(-?\\d+)", RegexOption.IGNORE_CASE).find(head.joinToString(" "))?.groupValues?.get(1) ?: ""
+    val kind = head.drop(1).lastOrNull { !it.startsWith("Парадная", true) && !it.contains("Этаж", true) } ?: ""
+    var rest = lines.drop(ri + 1)
+    val service = rest.firstOrNull()?.takeIf { it.length <= 30 && !it.contains("//") && !it.contains(":") && it.split(" ").size <= 4 }
+    if (service != null) rest = rest.drop(1)
+
+    var contact = ""
+    val body = ArrayList<String>()
+    for (l in rest) {
+        val c = Regex("^Контактный номер\\s*:\\s*(.*)$", RegexOption.IGNORE_CASE).find(l)
+        if (c != null) contact = c.groupValues[1] else body.add(l)
+    }
+    val phones = LinkedHashSet<String>()
+    fun addPhone(s: String) {
+        val d = s.filter { it.isDigit() }
+        val n = when {
+            d.length == 11 && (d[0] == '7' || d[0] == '8') -> "+7" + d.substring(1)
+            d.length == 10 && d[0] == '9' -> "+7$d"
+            else -> null
+        }
+        if (n != null) phones.add(n)
+    }
+    Regex("[+\\d][\\d\\s()\\-]{9,}\\d").findAll(contact).forEach { addPhone(it.value) }
+    PHONE_RE.findAll(body.joinToString("\n")).forEach { phones.add(normPhone(it.value)) }
+
+    var speed = ""
+    val segs = body.joinToString(" // ").split(Regex("\\s*//\\s*")).map { cleanSegment(it) { v -> speed = v } }.filter { it.isNotEmpty() }
+    if (speed.isEmpty()) Regex("(\\d+)\\s*мб", RegexOption.IGNORE_CASE).find(body.joinToString(" "))?.let { speed = it.groupValues[1] + " мбит" }
+    val note = buildString {
+        segs.forEachIndexed { i, sg ->
+            if (i > 0) append(' ')
+            append(sg)
+            if (!sg.endsWith(".")) append('.')
+        }
+    }
+
+    // Строка для навигатора: «Улица дом-корпус-квартира». Строение вида «/С1» считается корпусом.
+    val flat = Regex("(?<!\\p{L})кв\\.?\\s*(\\d+\\w*)", RegexOption.IGNORE_CASE).find(addrRaw)?.groupValues?.get(1)
+    val addrFixed = addrRaw.replace(Regex("(\\d)\\s*/\\s*[СсSsCc]\\.?\\s*(\\d+)"), "$1/$2")
+    val address = formatAddress(addrFixed.trim(), flat)
+
+    return render(
+        mapOf(
+            "адрес" to address, "договор" to contract, "заявка" to requestNo, "телефон" to phones.joinToString(", "),
+            "скорость" to speed, "примечание" to note, "парадная" to porch, "этаж" to floor,
+            "тип" to kind, "услуга" to (service ?: ""),
+        ),
+        address, skeleton,
+    )
 }
