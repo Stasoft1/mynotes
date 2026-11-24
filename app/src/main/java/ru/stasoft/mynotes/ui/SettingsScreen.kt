@@ -221,6 +221,19 @@ fun SettingsDialog(
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
                             val aboutCtx = LocalContext.current
+                            val diag = remember(aboutCtx) {
+                                val um = aboutCtx.getSystemService(android.os.UserManager::class.java)
+                                val first = try { aboutCtx.packageManager.getPackageInfo(aboutCtx.packageName, 0).firstInstallTime } catch (_: Exception) { 0L }
+                                "Профиль: " + (if (um?.isManagedProfile == true) "рабочий" else "основной или другой") + " (пользователь " + (android.os.Process.myUid() / 100000) + ")\n" +
+                                    "Папка данных: " + aboutCtx.dataDir.path + "\n" +
+                                    "Установлено: " + java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(first))
+                            }
+                            Text(
+                                "Где хранятся данные этой копии приложения:\n$diag",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            )
                             SettingsAction(Icons.Filled.Info, "Связь с автором", "Telegram: @Stasoft") {
                                 runCatching {
                                     aboutCtx.startActivity(
