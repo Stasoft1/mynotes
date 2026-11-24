@@ -81,7 +81,7 @@ fun SettingsDialog(
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 val pageTitles = mapOf(
                     "look" to "Внешний вид", "icon" to "Значок приложения", "security" to "Безопасность", "data" to "Данные и копии", "lists" to "Подсказки значений",
-                    "modules" to "Модули", "mods" to "Настройки модулей", "wallpaper" to "Обои", "budget" to "Бюджет", "health" to "Показатели", "util" to "Коммунальные услуги", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "about" to "О программе",
+                    "modules" to "Модули", "mods" to "Настройки модулей", "wallpaper" to "Обои", "budget" to "Бюджет", "health" to "Показатели", "util" to "Коммунальные услуги", "auto" to "Авто", "day" to "Папка дня", "giga" to "Голосовой ввод", "route" to "Маршрут", "help" to "Справка", "about" to "О программе",
                 )
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.IconButton(onClick = { goBack() }) {
@@ -90,6 +90,7 @@ fun SettingsDialog(
                     Text(pageTitles[page] ?: "Настройки", style = MaterialTheme.typography.titleLarge)
                 }
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (page in listOf("budget", "health", "util", "auto", "day", "giga", "route")) HelpLink(page!!, Modifier.padding(horizontal = 16.dp))
                     when (page) {
                         null -> {
                             SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема, кнопки, значок, обои") { page = "look" }
@@ -99,6 +100,7 @@ fun SettingsDialog(
                             SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
                             if (MODULE_PAGES.any { MODS.on(it) }) SettingsAction(Icons.Filled.Tune, "Настройки модулей", "Бюджет, авто, папка дня и другие") { page = "mods" }
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                            SettingsAction(Icons.Filled.Info, "Справка", "Переменные, шаблоны и каждый модуль с примерами") { page = "help" }
                             SettingsAction(Icons.Filled.Info, "О программе", "МоиЗаметки" + if (version.isNotEmpty()) " · версия $version" else "") { page = "about" }
                         }
                         "mods" -> {
@@ -203,6 +205,7 @@ fun SettingsDialog(
                         "util" -> UtilSettingsSection(vm)
                         "auto" -> AutoSettingsSection(vm)
                         "wallpaper" -> WallpaperSettingsSection(vm)
+                        "help" -> HelpIndexSection()
                         "day" -> AutoDaySettingsSection(vm)
                         "giga" -> VoiceSettingsSection(vm)
                         "route" -> RouteSettingsSection()

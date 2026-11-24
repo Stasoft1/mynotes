@@ -71,6 +71,7 @@ fun BudgetDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Бюджет", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton("budget")
                     val list = all
                     if (!list.isNullOrEmpty()) TextButton(onClick = {
                         val fmt = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())

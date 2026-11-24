@@ -75,6 +75,7 @@ fun HealthDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Показатели", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton("health")
                     TextButton(onClick = { adding = true }) { Text("+ Замер") }
                 }
                 val all = notes
@@ -191,6 +192,7 @@ fun HabitsDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Привычки", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton("habits")
                     TextButton(onClick = { adding = true }) { Text("+ Привычка") }
                 }
                 val habits = notes?.let { parseHabits(it) }

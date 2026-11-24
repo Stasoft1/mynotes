@@ -65,6 +65,7 @@ fun CarCostDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Расходы на авто", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton("auto")
                     TextButton(onClick = { adding = true }) { Text("+ Расход") }
                 }
                 val all = notes

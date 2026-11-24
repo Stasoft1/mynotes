@@ -47,6 +47,7 @@ fun ModulesSection(vm: AppViewModel) {
                 Column(Modifier.weight(1f)) {
                     Text(m.title, style = MaterialTheme.typography.bodyLarge)
                     Text(m.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    HelpLink(m.id)
                 }
                 AppSwitch(checked = on, onCheckedChange = { vm.setModule(m.id, it) })
             }

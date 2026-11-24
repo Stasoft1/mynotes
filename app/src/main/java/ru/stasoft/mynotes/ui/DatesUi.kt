@@ -63,6 +63,7 @@ fun DatesDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Сроки и даты", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton(if (tab in kinds) tab else kinds.firstOrNull() ?: "subs")
                     if (tab != "soon") TextButton(onClick = { adding = tab }) { Text("+ Добавить") }
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

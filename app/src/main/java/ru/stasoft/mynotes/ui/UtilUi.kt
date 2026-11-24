@@ -64,6 +64,7 @@ fun UtilDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
                     Text("Коммунальные услуги", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    HelpButton("util")
                     TextButton(onClick = { adding = true }) { Text("+ Показания") }
                 }
                 val all = notes
