@@ -1624,6 +1624,44 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         gigaCheck()
     }
 
+    // ---------- быстрые заметки (долгий тап на «+») ----------
+
+    var quickPresets by mutableStateOf(parseQuickPresets(uiPrefs().getString("quick_presets", "") ?: ""))
+        private set
+
+    fun saveQuickPresets(list: List<QuickPreset>) {
+        quickPresets = list
+        uiPrefs().edit().putString("quick_presets", quickPresetsToJson(list)).apply()
+    }
+
+    /** Создаёт заметку по заготовке: в выбранной папке (или текущей), из выбранного шаблона (или пустую), и открывает редактор. */
+    fun createQuick(p: QuickPreset) {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val target = if (p.folderId >= 0) dao.get(p.folderId) else null
+            val parent = target?.id ?: folderId.value
+            if (p.folderId >= 0 && target == null) message = "Папка из заготовки не найдена, заметка создана в текущей"
+            val sn = if (p.snippetId >= 0) allSnippets.value.firstOrNull { it.id == p.snippetId } else null
+            var title = ""
+            var body = ""
+            var spans = ""
+            if (sn != null) {
+                val (t0, sp) = expandTemplate(sn.text, sn.spansJson, parent)
+                body = withCar(t0); spans = sp; title = expandSnippet(sn.title)
+            }
+            val id = dao.insert(
+                NoteEntity(parentId = parent, title = title, body = body, spansJson = spans, sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now),
+            )
+            justCreated = Created(id, parent, target?.isFolder ?: true)
+            selectedId = id
+            dao.get(id)?.let {
+                editing = it
+                loadChain(it)
+            }
+        }
+    }
+
     /** Кнопка «+»: новая пустая заметка в текущей папке, сразу открывается редактор. */
     fun newNote() {
         val dao = dao() ?: return
@@ -2095,4 +2133,24 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     private companion object {
         const val AUTO_LOCK_MS = 30_000L
     }
+}
+
+/** Заготовка быстрой заметки: [folderId] < 0 — текущая папка, [snippetId] < 0 — пустая заметка. */
+data class QuickPreset(val name: String, val folderId: Long = -1, val snippetId: Long = -1)
+
+fun parseQuickPresets(json: String): List<QuickPreset> {
+    if (json.isBlank()) return emptyList()
+    return try {
+        val a = org.json.JSONArray(json)
+        (0 until a.length()).mapNotNull { i ->
+            val o = a.optJSONObject(i) ?: return@mapNotNull null
+            QuickPreset(o.optString("n"), o.optLong("f", -1), o.optLong("s", -1))
+        }
+    } catch (_: Exception) { emptyList() }
+}
+
+fun quickPresetsToJson(l: List<QuickPreset>): String {
+    val a = org.json.JSONArray()
+    l.forEach { a.put(org.json.JSONObject().put("n", it.name).put("f", it.folderId).put("s", it.snippetId)) }
+    return a.toString()
 }

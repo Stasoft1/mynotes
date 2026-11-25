@@ -4,6 +4,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -138,8 +142,29 @@ fun TopStrip(content: @Composable RowScope.() -> Unit) {
     )
 }
 
+/** Долгое нажатие поверх кнопки (обычное нажатие остаётся за самой кнопкой). */
+private fun Modifier.longPressOver(onLong: () -> Unit): Modifier = this.pointerInput(onLong) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            waitForUpOrCancellation(PointerEventPass.Initial)
+        }
+        if (up == null) {
+            onLong()
+            // Отпускание после долгого нажатия не должно считаться обычным нажатием.
+            waitForUpOrCancellation(PointerEventPass.Initial)?.consume()
+        }
+    }
+}
+
 @Composable
-fun StripButton(icon: ImageVector, description: String, accent: Boolean = false, onClick: () -> Unit) {
+fun StripButton(icon: ImageVector, description: String, accent: Boolean = false, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    if (onLongClick == null) { StripButtonBase(icon, description, accent, onClick); return }
+    Box(Modifier.longPressOver(onLongClick)) { StripButtonBase(icon, description, accent, onClick) }
+}
+
+@Composable
+private fun StripButtonBase(icon: ImageVector, description: String, accent: Boolean, onClick: () -> Unit) {
     val skin = LocalButtonStyle.current
     if (skin >= 2) {
         val shape = if (skin == 3 || skin == 2) androidx.compose.foundation.shape.RoundedCornerShape(15.dp) else androidx.compose.foundation.shape.CircleShape
@@ -198,6 +223,9 @@ fun TreeScreen(vm: AppViewModel) {
     var deleteTarget by remember { mutableStateOf<NoteEntity?>(null) }
     var showBioSetup by remember { mutableStateOf(false) }
     var showSnippets by remember { mutableStateOf(false) }
+    var showQuick by remember { mutableStateOf(false) }
+    var showQuickCfg by remember { mutableStateOf(false) }
+    if (showQuickCfg) QuickPresetsDialog(vm) { showQuickCfg = false }
     LaunchedEffect(vm.reopenTemplates) {
         if (vm.reopenTemplates) {
             vm.reopenTemplates = false
@@ -268,7 +296,10 @@ fun TreeScreen(vm: AppViewModel) {
         topBar = {
             if (vm.multi != null) MultiStrip(vm, items) else TopStrip {
                 if (folderId != null) StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { vm.goUp() }
-                StripButton(Icons.Filled.Add, "Создать заметку") { vm.newNote() }
+                Box {
+                    StripButton(Icons.Filled.Add, "Создать заметку (долгое нажатие — быстрые заметки)", onLongClick = { showQuick = true }) { vm.newNote() }
+                    QuickMenu(vm, showQuick, { showQuick = false }, onConfigure = { showQuick = false; showQuickCfg = true })
+                }
                 StripButton(Icons.Filled.CreateNewFolder, "Создать папку") { vm.newChild() }
                 StripButton(Icons.Filled.Mic, "Голосовая заметка") { startSpeech() }
                 StripButton(Icons.Filled.Edit, "Редактировать выбранное") { vm.editSelected() }

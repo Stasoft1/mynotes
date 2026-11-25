@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -76,6 +77,8 @@ fun SettingsDialog(
             else -> null
         }
     }
+    var showQuick by remember { mutableStateOf(false) }
+    if (showQuick) QuickPresetsDialog(vm) { showQuick = false }
     Dialog(onDismissRequest = { goBack() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -96,6 +99,7 @@ fun SettingsDialog(
                             SettingsAction(Icons.Filled.Palette, "Внешний вид", "Тема, кнопки, значок, обои") { page = "look" }
                             SettingsAction(Icons.Filled.Fingerprint, "Безопасность", "Пароль и вход по отпечатку") { page = "security" }
                             SettingsAction(Icons.Filled.Backup, "Данные и копии", "Резервные копии, импорт, проверка показаний") { page = "data" }
+                            SettingsAction(Icons.Filled.Add, "Быстрые заметки", "Долгое нажатие на «+»: заготовки «папка + шаблон»") { showQuick = true }
                             SettingsAction(Icons.Filled.Lightbulb, "Подсказки значений", "Списки для полей: «Магазин:», «Авто:»…") { page = "lists" }
                             SettingsAction(Icons.Filled.Extension, "Модули", "Включение необязательных функций") { page = "modules" }
                             if (MODULE_PAGES.any { MODS.on(it) }) SettingsAction(Icons.Filled.Tune, "Настройки модулей", "Бюджет, авто, папка дня и другие") { page = "mods" }
