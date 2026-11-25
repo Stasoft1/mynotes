@@ -1,6 +1,7 @@
 package ru.stasoft.mynotes.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -69,23 +70,12 @@ fun noteLinkText(id: Long, title: String): String =
 @Composable
 fun NoteLinksRow(vm: AppViewModel, body: String) {
     val ctx = LocalContext.current
-    val notes = remember(body) { findNoteLinks(body) }
     val hits = remember(body) { findLinks(body) }
-    if (notes.isEmpty() && hits.isEmpty()) return
+    if (hits.isEmpty()) return
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        notes.forEach { l ->
-            val shown by produceState(l.title, l.id) {
-                if (value == null) value = vm.noteById(l.id)?.let { it.displayTitle().ifBlank { "Без названия" } } ?: "заметка не найдена"
-            }
-            AssistChip(
-                onClick = { vm.followNoteLink(l.id) { Toast.makeText(ctx, "Заметка не найдена: возможно, она удалена", Toast.LENGTH_SHORT).show() } },
-                label = { Text("→ " + (shown ?: ("№" + l.id)), maxLines = 1) },
-                leadingIcon = { Icon(Icons.Filled.Description, null, Modifier.padding(0.dp)) },
-            )
-        }
         hits.forEach { h ->
             AssistChip(
                 onClick = { openHit(ctx, h) },
@@ -98,7 +88,7 @@ fun NoteLinksRow(vm: AppViewModel, body: String) {
 
 /** Кнопка «Ссылка» в редакторе: адрес в интернете или другая заметка (ID из свойств либо выбор по поиску). */
 @Composable
-fun LinkInsertDialog(vm: AppViewModel, current: NoteEntity, onDismiss: () -> Unit, onInsert: (String) -> Unit) {
+fun LinkInsertDialog(vm: AppViewModel, current: NoteEntity, onDismiss: () -> Unit, title: String? = null, onInsert: (String) -> Unit) {
     val clip = LocalClipboardManager.current
     var mode by remember { mutableStateOf(0) }
     var url by remember { mutableStateOf("https://") }
@@ -117,7 +107,7 @@ fun LinkInsertDialog(vm: AppViewModel, current: NoteEntity, onDismiss: () -> Uni
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Вставить ссылку") },
+        title = { Text(if (title != null) "Ссылка для «" + title.take(30) + "»" else "Вставить ссылку") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -155,15 +145,36 @@ fun LinkInsertDialog(vm: AppViewModel, current: NoteEntity, onDismiss: () -> Uni
             TextButton(onClick = {
                 if (mode == 1) {
                     val u = url.trim()
-                    if (u.isNotEmpty() && u != "https://") { onInsert(if (u.contains("://")) u else "https://$u"); onDismiss() }
+                    if (u.isNotEmpty() && u != "https://") { val full = if (u.contains("://")) u else "https://$u"; onInsert(if (title != null) "$title $full" else full); onDismiss() }
                 } else {
                     val id = parseNoteRef(idText)
                     val n = id?.let { i -> all?.firstOrNull { it.id == i } }
                     if (n == null) error = "Записи с таким ID нет"
-                    else { onInsert(noteLinkText(n.id, n.displayTitle().ifBlank { "Без названия" })); onDismiss() }
+                    else { onInsert(noteLinkText(n.id, title ?: n.displayTitle().ifBlank { "Без названия" })); onDismiss() }
                 }
             }) { Text("Вставить") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+}
+
+/** Панель над клавиатурой, когда курсор в ссылке на заметку: перейти, сменить цель, убрать ссылку. */
+@Composable
+fun LinkBar(vm: AppViewModel, link: LinkRange, readOnly: Boolean, onEdit: () -> Unit, onUnlink: () -> Unit) {
+    val ctx = LocalContext.current
+    val shown by produceState(link.title, link.id) {
+        if (value == null) value = vm.noteById(link.id)?.let { it.displayTitle().ifBlank { "Без названия" } } ?: "заметка не найдена"
+    }
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Description, null, Modifier.padding(end = 6.dp))
+        Text((shown ?: "№" + link.id) + "  (№" + link.id + ")", maxLines = 1)
+        TextButton(onClick = { vm.followNoteLink(link.id) { Toast.makeText(ctx, "Заметка не найдена: возможно, она удалена", Toast.LENGTH_SHORT).show() } }) { Text("Перейти") }
+        if (!readOnly) {
+            TextButton(onClick = onEdit) { Text("Изменить") }
+            TextButton(onClick = onUnlink) { Text("Убрать ссылку") }
+        }
+    }
 }

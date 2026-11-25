@@ -170,27 +170,33 @@ fun NotePreview(
     onTable: (TableBlock) -> Unit,
     onEditText: () -> Unit,
     modifier: Modifier = Modifier,
+    onLink: (Long) -> Unit = {},
 ) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val bodyStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+    @Composable
+    fun Part(sub: String, from: Int, to: Int) {
+        val map = LinkMap(noteLinkRanges(sub))
+        val shown = map.apply(buildStyled(sub, clipSpans(spans, from, to)), linkColor)
+        androidx.compose.foundation.text.ClickableText(
+            shown,
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            style = bodyStyle,
+            onClick = { off -> val l = map.linkAtShown(off); if (l != null) onLink(l.id) else onEditText() },
+        )
+    }
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         var pos = 0
         tables.forEach { t ->
             val to = maxOf(pos, t.start - 1)
             val sub = text.substring(pos, to)
-            if (sub.isNotBlank()) Text(
-                buildStyled(sub, clipSpans(spans, pos, to)),
-                Modifier.fillMaxWidth().clickable { onEditText() }.padding(vertical = 4.dp),
-                style = MaterialTheme.typography.bodyLarge,
-            )
+            if (sub.isNotBlank()) Part(sub, pos, to)
             TableGrid(t.rows, t.aligns, Modifier.padding(vertical = 6.dp), onClick = { onTable(t) })
             pos = minOf(text.length, t.end + 1)
         }
         if (pos < text.length) {
             val sub = text.substring(pos)
-            if (sub.isNotBlank()) Text(
-                buildStyled(sub, clipSpans(spans, pos, text.length)),
-                Modifier.fillMaxWidth().clickable { onEditText() }.padding(vertical = 4.dp),
-                style = MaterialTheme.typography.bodyLarge,
-            )
+            if (sub.isNotBlank()) Part(sub, pos, text.length)
         }
         Text(
             "Коснитесь таблицы, чтобы изменить её, или текста — чтобы править заметку.",

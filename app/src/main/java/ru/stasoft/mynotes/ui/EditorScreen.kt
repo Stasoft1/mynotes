@@ -242,8 +242,9 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
             bodyField = v
             return
         }
+        var v = v
         val a = old.text
-        val b = v.text
+        var b = v.text
         val max = minOf(a.length, b.length)
         var p = 0
         while (p < max && a[p] == b[p]) p++
@@ -251,6 +252,22 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         while (sfx < max - p && a[a.length - 1 - sfx] == b[b.length - 1 - sfx]) sfx++
         var removed = a.length - p - sfx
         var inserted = b.length - p - sfx
+        // Правка задела служебные символы ссылки [[id|…]]: удаляем ссылку целиком, а не оставляем «обломки».
+        if (removed > 0 && a.contains("[[")) {
+            val hit = noteLinkRanges(a).firstOrNull { l ->
+                val rs = p; val re = p + removed
+                val touches = rs < l.ts && re > l.s || re > l.te && rs < l.e || (l.title == null && rs < l.e && re > l.s)
+                touches && !(rs <= l.s && re >= l.e)
+            }
+            if (hit != null) {
+                val rs = minOf(p, hit.s); val re = maxOf(p + removed, hit.e)
+                val nb = a.removeRange(rs, re)
+                v = TextFieldValue(nb, androidx.compose.ui.text.TextRange(rs))
+                b = nb
+                p = rs; removed = re - rs; inserted = 0
+                // Диапазоны оформления считаем по полному удалению.
+            }
+        }
         // Enter в конце строки перед другим переводом строки по тексту неоднозначен (куда вставлен '\n'),
         // поэтому место берём по курсору: он стоит сразу после вставленного перевода строки.
         val q = v.selection.start
@@ -369,10 +386,24 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
     }
 
     var showLinkDialog by remember { mutableStateOf(false) }
-    if (showLinkDialog) LinkInsertDialog(vm, note, onDismiss = { showLinkDialog = false }) { text ->
-        if (note.checklist) checklist.addLines(text)
-        else if (titleFocused) setCurrent(current().replaceSelection(text))
-        else updateBody(bodyField.replaceSelection(text))
+    var editLink by remember { mutableStateOf<LinkRange?>(null) }
+    if (showLinkDialog) {
+        // Выделенный текст становится названием ссылки.
+        val selTitle = remember {
+            val c = current()
+            if (!note.checklist && c.selection.length in 1..60 && !c.selectedText().contains('\n') && !c.selectedText().contains("[[")) c.selectedText() else null
+        }
+        LinkInsertDialog(vm, note, onDismiss = { showLinkDialog = false }, title = selTitle) { text ->
+            if (note.checklist) checklist.addLines(text)
+            else if (titleFocused) setCurrent(current().replaceSelection(text))
+            else updateBody(bodyField.replaceSelection(text))
+        }
+    }
+    editLink?.let { l ->
+        LinkInsertDialog(vm, note, onDismiss = { editLink = null }, title = l.title) { text ->
+            val t = bodyField.text
+            if (l.e <= t.length) updateBody(TextFieldValue(t.replaceRange(l.s, l.e, text), androidx.compose.ui.text.TextRange(l.s + text.length)))
+        }
     }
 
     tableDlg?.let { d ->
@@ -515,11 +546,12 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     onTable = { b -> if (!note.readOnly) tableDlg = TableDraft(b.start, b.end, b.rows, false, b.aligns) },
                     onEditText = { if (!note.readOnly) preview = false },
                     modifier = Modifier.fillMaxWidth().weight(1f),
+                    onLink = { id -> vm.followNoteLink(id) { android.widget.Toast.makeText(ctxToast, "Заметка не найдена: возможно, она удалена", android.widget.Toast.LENGTH_SHORT).show() } },
                 )
             } else TextField(
                 value = bodyField,
                 onValueChange = { updateBody(it) },
-                visualTransformation = remember(spans) { SpanTransformation(spans) },
+                visualTransformation = run { val lc = MaterialTheme.colorScheme.primary; remember(spans, lc) { SpanTransformation(spans, lc) } },
                 placeholder = { Text("Текст") },
                 readOnly = note.readOnly,
                 colors = flatFieldColors(),
@@ -527,6 +559,17 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                     .fillMaxWidth()
                     .weight(1f)
                     .onFocusChanged { if (it.isFocused) titleFocused = false }
+            )
+            // Курсор в ссылке на заметку: перейти / изменить / убрать.
+            val linkHere = if (titleFocused || note.checklist || !bodyField.selection.collapsed) null else linkAtCursor(bodyField.text, bodyField.selection.start)
+            if (linkHere != null) LinkBar(
+                vm, linkHere, note.readOnly,
+                onEdit = { editLink = linkHere },
+                onUnlink = {
+                    val t = bodyField.text
+                    val plain = linkHere.shown
+                    updateBody(TextFieldValue(t.replaceRange(linkHere.s, linkHere.e, plain), androidx.compose.ui.text.TextRange(linkHere.s + plain.length)))
+                },
             )
             // Подсказка значений: курсор в строке «Поле: …», у поля есть список.
             val fieldLine = if (!bodyField.selection.collapsed || titleFocused || note.readOnly || note.checklist) null
@@ -580,6 +623,10 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                         FmtButton(Icons.Filled.FormatAlignRight, "По правому краю", false) { alignLines("r") }
                         FmtButton(Icons.Filled.FormatListBulleted, "Маркированный список", false) { updateBody(bodyField.toggleBullet()) }
                         FmtButton(Icons.Filled.FormatListNumbered, "Нумерованный список", false) { updateBody(bodyField.toggleNumbered()) }
+                        FmtButton(Icons.Filled.Link, "Ссылка на заметку или сайт", linkAtCursor(bodyField.text, bodyField.selection.start) != null) {
+                            val l = if (bodyField.selection.collapsed) linkAtCursor(bodyField.text, bodyField.selection.start) else null
+                            if (l != null) editLink = l else showLinkDialog = true
+                        }
                         FmtButton(Icons.Filled.FormatClear, "Сбросить оформление", false) { clearStyle() }
                     }
                 }
@@ -590,7 +637,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                         tableDlg = if (hit != null) TableDraft(hit.start, hit.end, hit.rows, false, hit.aligns)
                         else TableDraft(bodyField.selection.start, bodyField.selection.start, newTableRows(), true)
                     }
-                    if (ru.stasoft.mynotes.data.findTables(body).isNotEmpty() || preview) ToolButton(
+                    if (ru.stasoft.mynotes.data.findTables(body).isNotEmpty() || noteLinkRanges(body).isNotEmpty() || preview) ToolButton(
                         if (preview) Icons.Filled.Edit else Icons.Filled.Visibility,
                         if (preview) "Править текст" else "Просмотр",
                     ) { preview = !preview }

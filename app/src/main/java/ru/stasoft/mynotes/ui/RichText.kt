@@ -117,15 +117,19 @@ internal fun buildStyled(text: String, spans: List<Span>): AnnotatedString {
 }
 
 /** Показывает оформление поверх обычного текста поля, не меняя сам текст и положение курсора. */
-class SpanTransformation(private val spans: List<Span>) : VisualTransformation {
+class SpanTransformation(private val spans: List<Span>, private val linkColor: Color = Color(0xFF3B6FD4)) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val tables = if (text.text.contains('|')) ru.stasoft.mynotes.data.findTables(text.text) else emptyList()
-        if (spans.isEmpty() && tables.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        val styled = buildStyled(text.text, spans)
-        if (tables.isEmpty()) return TransformedText(styled, OffsetMapping.Identity)
-        val b = AnnotatedString.Builder(styled)
-        tables.forEach { b.addStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, background = Color(0x2260A5FA)), it.start, minOf(it.end, text.text.length)) }
-        return TransformedText(b.toAnnotatedString(), OffsetMapping.Identity)
+        val map = LinkMap(noteLinkRanges(text.text))
+        if (spans.isEmpty() && tables.isEmpty() && map.identity) return TransformedText(text, OffsetMapping.Identity)
+        var styled = buildStyled(text.text, spans)
+        if (tables.isNotEmpty()) {
+            val b = AnnotatedString.Builder(styled)
+            tables.forEach { b.addStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, background = Color(0x2260A5FA)), it.start, minOf(it.end, text.text.length)) }
+            styled = b.toAnnotatedString()
+        }
+        if (map.identity) return TransformedText(styled, OffsetMapping.Identity)
+        return TransformedText(map.apply(styled, linkColor), map.offsets)
     }
 }
 
