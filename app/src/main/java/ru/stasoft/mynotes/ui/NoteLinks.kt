@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ru.stasoft.mynotes.data.NoteEntity
+import ru.stasoft.mynotes.data.displayTitle
 
 /** Ссылка на другую заметку или папку внутри текста: [[123]] или [[123|Название]]. */
 class NoteLink(val id: Long, val title: String?)
