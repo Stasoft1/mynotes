@@ -153,7 +153,7 @@ fun PropertiesScreen(vm: AppViewModel, note: NoteEntity) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("ID: " + note.id, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
-                        clip.setText(androidx.compose.ui.text.AnnotatedString(noteLinkText(note.id, note.displayTitle().ifBlank { "Без названия" })))
+                        clip.setText(androidx.compose.ui.text.AnnotatedString(noteLinkText(note.id, note.title.ifBlank { "Без названия" })))
                         android.widget.Toast.makeText(ctxP, "Ссылка скопирована. В другой заметке нажмите «Ссылка» и вставьте", android.widget.Toast.LENGTH_LONG).show()
                     }) { Text("Копировать ссылку") }
                 }
