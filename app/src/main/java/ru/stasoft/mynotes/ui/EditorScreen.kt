@@ -1,5 +1,6 @@
 package ru.stasoft.mynotes.ui
 
+import androidx.compose.material.icons.filled.Link
 import ru.stasoft.mynotes.modules.Modules
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -367,6 +368,13 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
         }
     }
 
+    var showLinkDialog by remember { mutableStateOf(false) }
+    if (showLinkDialog) LinkInsertDialog(vm, note, onDismiss = { showLinkDialog = false }) { text ->
+        if (note.checklist) checklist.addLines(text)
+        else if (titleFocused) setCurrent(current().replaceSelection(text))
+        else updateBody(bodyField.replaceSelection(text))
+    }
+
     tableDlg?.let { d ->
         TableEditDialog(
             draft = d,
@@ -448,6 +456,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 if (note.id >= 0) StripButton(Icons.Filled.Notifications, "Напоминание") { showReminderDialog = true }
                 if (note.id >= 0 && Modules.on("geo")) StripButton(Icons.Filled.Place, "Напомнить по месту") { showGeoDialog = true }
                 if (note.id >= 0 && !note.readOnly) StripButton(Icons.Filled.PhotoCamera, "Фото") { pickPhoto() }
+                if (note.id >= 0 && !note.readOnly) StripButton(Icons.Filled.Link, "Ссылка") { showLinkDialog = true }
                 if (routeAddr != null) StripButton(Icons.Filled.Directions, "Маршрут") { openRoute(routeCtx, routeAddr) }
                 if (note.id >= 0) StripButton(Icons.Filled.Tune, "Свойства") {
                     vm.openProps(note)
@@ -482,6 +491,7 @@ fun EditorScreen(vm: AppViewModel, note: NoteEntity) {
                 GeoRow(note = note, onEdit = { showGeoDialog = true })
             }
             if (note.id >= 0) PhotoStrip(vm, note.id, note.readOnly)
+            if (note.id >= 0 && !note.checklist) NoteLinksRow(vm, body)
             undoReq?.let { u ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("Заявка приведена к шаблону Ф1", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)

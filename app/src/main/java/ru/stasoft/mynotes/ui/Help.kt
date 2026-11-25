@@ -43,6 +43,7 @@ import ru.stasoft.mynotes.modules.Modules
 /** Общие разделы справки (не модули). Тексты лежат в assets/help/<id>.md. */
 val HELP_BASICS = listOf(
     "vars" to "Переменные и подсчёты",
+    "links" to "Ссылки между заметками",
     "templates" to "Шаблоны",
     "voice" to "Голосовой ввод",
 )
@@ -150,13 +151,30 @@ fun HelpLink(id: String, modifier: Modifier = Modifier) {
 
 /** Страница настроек «Справка»: общие разделы и все модули. */
 @Composable
-fun HelpIndexSection() {
+fun HelpIndexSection(vm: AppViewModel) {
     var open by remember { mutableStateOf<String?>(null) }
     open?.let { HelpDialog(it) { open = null } }
     @Composable fun item(id: String, title: String, sub: String) {
         Column(Modifier.fillMaxWidth().clickable { open = id }.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    if (ru.stasoft.mynotes.data.GUIDE_ENABLED) {
+        val ctxG = LocalContext.current
+        Column(
+            Modifier.fillMaxWidth().clickable {
+                vm.addGuide { created ->
+                    android.widget.Toast.makeText(
+                        ctxG,
+                        if (created) "Папка «Руководство» добавлена на главный экран" else "Папка «Руководство» уже есть в базе",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }.padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Text("Руководство в виде заметок", style = MaterialTheme.typography.titleMedium)
+            Text("Добавить на главный экран папку с заметками и переходами между ними", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     Text("ОСНОВЫ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 8.dp))

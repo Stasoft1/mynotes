@@ -252,6 +252,37 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Руководство в виде заметок создаётся один раз на пустой базе (только в публичной редакции). */
+    private suspend fun seedGuideOnce(db: AppDatabase) {
+        if (!ru.stasoft.mynotes.data.GUIDE_ENABLED) return
+        val prefs = app.getSharedPreferences("app", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("guide_seeded", false)) return
+        val dao = db.notes()
+        if (dao.count() == 0) {
+            try {
+                ru.stasoft.mynotes.data.seedGuide(app, dao)
+            } catch (e: Exception) {
+                android.util.Log.e("MyNotes", "guide seed failed", e)
+            }
+        }
+        prefs.edit().putBoolean("guide_seeded", true).apply()
+    }
+
+    /** Добавляет папку «Руководство» по просьбе пользователя; false — такая папка уже есть. */
+    fun addGuide(onDone: (Boolean) -> Unit) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            if (ru.stasoft.mynotes.data.hasGuide(dao)) { onDone(false); return@launch }
+            try {
+                ru.stasoft.mynotes.data.seedGuide(app, dao)
+                onDone(true)
+            } catch (e: Exception) {
+                android.util.Log.e("MyNotes", "guide seed failed", e)
+                onDone(false)
+            }
+        }
+    }
+
     private suspend fun seedSnippetsOnce(db: AppDatabase) {
         val prefs = app.getSharedPreferences("app", android.content.Context.MODE_PRIVATE)
         val dao = db.notes()
@@ -518,6 +549,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
             startReminderSync(db)
             try {
                 withContext(Dispatchers.IO) { seedSnippetsOnce(db) }
+                seedGuideOnce(db)
             } catch (e: Exception) {
                 android.util.Log.e("MyNotes", "snippet seed failed", e)
             }
@@ -647,6 +679,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         unlocked = false
         // Папка, выбор и поиск остаются, а тексты записей из памяти убираем: после входа они загрузятся заново.
         editing = null
+        linkBack.clear()
         props = null
         path = emptyList()
         sortMode.value = rootSort()
@@ -832,6 +865,13 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         if (query.value.isNotBlank()) {
             query.value = ""
             return true
+        }
+        linkBack.lastOrNull()?.let { top ->
+            if (top.targetId == folderId.value) {
+                linkBack.removeAt(linkBack.lastIndex)
+                returnFromLink(top)
+                return true
+            }
         }
         if (folderId.value == null) return false
         val left = folderId.value
@@ -1733,6 +1773,44 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- ссылки между заметками ----------
+
+    /** Переход по ссылке: [returnNoteId] — заметка, с которой перешли, [targetId] — куда. «Назад» ведёт обратно. */
+    private class LinkBack(val returnNoteId: Long, val targetId: Long)
+
+    private val linkBack = ArrayList<LinkBack>()
+
+    suspend fun noteById(id: Long): NoteEntity? = dao()?.get(id)
+
+    /** Открывает запись по ссылке из редактора; несохранённые правки текущей заметки сохраняются. */
+    fun followNoteLink(id: Long, onMissing: () -> Unit) {
+        val dao = dao() ?: return
+        viewModelScope.launch {
+            val target = dao.get(id)
+            if (target == null) {
+                onMissing()
+                return@launch
+            }
+            val cur = editing
+            if (cur != null && cur.id >= 0) {
+                draft?.let { d -> if (d.id == cur.id) save(d.id, d.title, d.body, d.spans) }
+                draft = null
+                if (cur.id == target.id) return@launch
+                linkBack.add(LinkBack(cur.id, target.id))
+                closeEditor(keepLinks = true)
+            }
+            openNote(target)
+        }
+    }
+
+    private fun returnFromLink(top: LinkBack) {
+        val dao = dao() ?: run { editing = null; return }
+        viewModelScope.launch {
+            val n = dao.get(top.returnNoteId)
+            if (n != null) editNote(n) else editing = null
+        }
+    }
+
     fun editNote(note: NoteEntity) {
         justCreated = null
         selectedId = note.id
@@ -1752,7 +1830,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
      * Закрывает редактор. Если передать текущие [title] и [body] и запись создана только что и осталась пустой,
      * она удаляется (чтобы не копились пустые заметки).
      */
-    fun closeEditor(title: String? = null, body: String? = null) {
+    fun closeEditor(title: String? = null, body: String? = null, keepLinks: Boolean = false) {
         val dao = dao()
         val cur = editing
         val jc = justCreated
@@ -1766,6 +1844,17 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         if (cur != null) {
             selectedId = cur.id
             scrollTick++
+        }
+        if (!keepLinks && cur != null && cur.id >= 0) {
+            val top = linkBack.lastOrNull()
+            if (top != null && top.targetId == cur.id) {
+                // Пришли сюда по ссылке: «Назад» ведёт обратно на исходную заметку, а не на уровень выше.
+                linkBack.removeAt(linkBack.lastIndex)
+                justCreated = null
+                returnFromLink(top)
+                return
+            }
+            linkBack.clear()
         }
         editing = null
         justCreated = null

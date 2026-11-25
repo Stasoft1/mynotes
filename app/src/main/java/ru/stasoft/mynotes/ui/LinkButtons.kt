@@ -110,7 +110,7 @@ fun openRoute(ctx: Context, address: String) {
     }
 }
 
-private fun openHit(ctx: Context, hit: LinkHit) {
+internal fun openHit(ctx: Context, hit: LinkHit) {
     val intent = if (hit.kind == 0) Intent(Intent.ACTION_VIEW, Uri.parse(hit.target))
     else Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(hit.target)))
     try {

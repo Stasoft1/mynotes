@@ -32,7 +32,7 @@ GROUPS = [
 ]
 
 parts = []
-parts.append((root / "docs/manual_head.md").read_text(encoding="utf-8").rstrip() + "\n")
+parts.append((root / "docs/manual_head.md").read_text(encoding="utf-8").rstrip() + "\n\n### Ссылки между заметками\n\n" + help_text("links", 2))
 parts.append("## 5. Шаблоны\n\n" + help_text("templates", 1))
 parts.append("## 6. Переменные и подсчёты\n\n" + help_text("vars", 1))
 parts.append((root / "docs/manual_mid.md").read_text(encoding="utf-8").rstrip() + "\n")

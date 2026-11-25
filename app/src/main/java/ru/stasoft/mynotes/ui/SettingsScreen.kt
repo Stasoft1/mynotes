@@ -205,7 +205,7 @@ fun SettingsDialog(
                         "util" -> UtilSettingsSection(vm)
                         "auto" -> AutoSettingsSection(vm)
                         "wallpaper" -> WallpaperSettingsSection(vm)
-                        "help" -> HelpIndexSection()
+                        "help" -> HelpIndexSection(vm)
                         "day" -> AutoDaySettingsSection(vm)
                         "giga" -> VoiceSettingsSection(vm)
                         "route" -> RouteSettingsSection()

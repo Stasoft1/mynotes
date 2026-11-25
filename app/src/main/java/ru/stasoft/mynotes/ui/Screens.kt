@@ -106,7 +106,7 @@ fun AppRoot(vm: AppViewModel) {
                 when {
                     !vm.unlocked -> LockScreen(vm)
                     vm.props != null -> PropertiesScreen(vm, vm.props!!)
-                    vm.editing != null -> EditorScreen(vm, vm.editing!!)
+                    vm.editing != null -> androidx.compose.runtime.key(vm.editing!!.id) { EditorScreen(vm, vm.editing!!) }
                     vm.showReminders -> ReminderListScreen(vm)
                     else -> TreeScreen(vm)
                 }

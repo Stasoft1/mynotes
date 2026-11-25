@@ -14,6 +14,9 @@ val DEFAULT_SNIPPETS: List<Pair<String, String>> = listOf(
     "Заправка" to "Заправка",
 )
 
+/** В личной редакции руководство в заметках не создаётся. */
+const val GUIDE_ENABLED = false
+
 /** Разовые шаблоны, которые добавляются при первом запуске: (ключ в настройках, название, текст). */
 val EXTRA_TEMPLATES: List<Triple<String, String, String>> = listOf(
     Triple("cable_template_seeded", "Кабель: взял на склад", "Взял вп: \nВзял кокс: "),
