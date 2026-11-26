@@ -1149,6 +1149,15 @@ private fun TodayCard(t: AppViewModel.TodayInfo, onOpen: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        t.others.forEach { (name, vals) ->
+            Text(
+                "$name: " + formatValuesMoney(vals),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

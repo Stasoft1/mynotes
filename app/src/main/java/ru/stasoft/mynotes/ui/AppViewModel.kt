@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -193,6 +194,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val values: List<Pair<String, Double>>,
         val parentTitle: String?,
         val parentValues: List<Pair<String, Double>>,
+        /** Другие папки сегодняшнего дня (не из «рабочей» ветки): название верхней папки и значения. */
+        val others: List<Pair<String, List<Pair<String, Double>>>> = emptyList(),
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -200,11 +203,30 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         dbFlow
             .flatMapLatest { db ->
                 if (db == null) flowOf(null)
-                else combine(db.notes().folderTitles(), numbers) { folders, nums ->
+                else combine(db.notes().folderTitles(), numbers, snapshotFlow { autoDayRoot }) { folders, nums, root ->
                     val d = java.time.LocalDate.now()
-                    val hit = folders.firstOrNull { dateInTitle(it.title) == d } ?: return@combine null
+                    val hits = folders.filter { dateInTitle(it.title) == d }
+                    if (hits.isEmpty()) return@combine null
+                    val byId = folders.associateBy { it.id }
+                    fun inside(f: FolderTitle, r: Long): Boolean {
+                        var c: Long? = f.parentId
+                        var g = 0
+                        while (c != null && g++ < 64) { if (c == r) return true; c = byId[c]?.parentId }
+                        return false
+                    }
+                    // Основная — день из «рабочей» ветки (папка дня в настройках); без неё — та, где больше значений.
+                    val work = if (root >= 0) hits.filter { it.id == root || inside(it, root) } else emptyList()
+                    val hit = work.maxByOrNull { nums[it.id].orEmpty().size }
+                        ?: hits.maxByOrNull { nums[it.id].orEmpty().size } ?: return@combine null
                     val parent = folders.firstOrNull { it.id == hit.parentId }
-                    TodayInfo(hit, nums[hit.id].orEmpty(), parent?.title, parent?.let { nums[it.id] }.orEmpty())
+                    fun top(f: FolderTitle): String {
+                        var c: FolderTitle = f
+                        var g = 0
+                        while (c.parentId != null && g++ < 64) c = byId[c.parentId] ?: break
+                        return c.title
+                    }
+                    val others = hits.filter { it.id != hit.id && nums[it.id].orEmpty().isNotEmpty() }.take(3).map { top(it) to nums[it.id].orEmpty() }
+                    TodayInfo(hit, nums[hit.id].orEmpty(), parent?.title, parent?.let { nums[it.id] }.orEmpty(), others)
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
