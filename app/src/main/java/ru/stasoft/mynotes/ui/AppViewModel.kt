@@ -1639,9 +1639,31 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val dao = dao() ?: return
         val now = System.currentTimeMillis()
         viewModelScope.launch {
-            val target = if (p.folderId >= 0) dao.get(p.folderId) else null
-            val parent = target?.id ?: folderId.value
-            if (p.folderId >= 0 && target == null) message = "Папка из заготовки не найдена, заметка создана в текущей"
+            var target: NoteEntity? = null
+            var parent: Long? = folderId.value
+            when {
+                p.folderId >= 0 -> {
+                    target = dao.get(p.folderId)
+                    if (target == null) message = "Папка из заготовки не найдена, заметка создана в текущей" else parent = target.id
+                }
+                p.folderId == QUICK_ROOT -> parent = null
+                p.folderId == QUICK_DAY -> {
+                    val today = java.time.LocalDate.now()
+                    val folders = dao.folderTitles().first()
+                    val ex = folders.firstOrNull { dateInTitle(it.title) == today }
+                    if (ex != null) { target = dao.get(ex.id); parent = ex.id }
+                    else {
+                        val last = folders.filter { dateInTitle(it.title) != null }.maxByOrNull { dateInTitle(it.title)!! }
+                        if (last == null) message = "Папка дня не найдена: создайте одну папку с датой в названии. Заметка создана в текущей папке"
+                        else {
+                            val fid = dao.insert(
+                                NoteEntity(parentId = last.parentId, isFolder = true, title = formatLike(last.title, today), sortIndex = dao.maxSort(last.parentId) + 1, createdAt = now, updatedAt = now),
+                            )
+                            target = dao.get(fid); parent = fid
+                        }
+                    }
+                }
+            }
             val sn = if (p.snippetId >= 0) allSnippets.value.firstOrNull { it.id == p.snippetId } else null
             var title = ""
             var body = ""
@@ -2135,7 +2157,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 }
 
-/** Заготовка быстрой заметки: [folderId] < 0 — текущая папка, [snippetId] < 0 — пустая заметка. */
+/** Заготовка быстрой заметки: [folderId]: ≥ 0 — папка, -1 текущая, -2 папка сегодняшнего дня (создаётся, если её нет), -3 главный экран, [snippetId] < 0 — пустая заметка. */
+const val QUICK_CURRENT = -1L
+const val QUICK_DAY = -2L
+const val QUICK_ROOT = -3L
+
 data class QuickPreset(val name: String, val folderId: Long = -1, val snippetId: Long = -1)
 
 fun parseQuickPresets(json: String): List<QuickPreset> {

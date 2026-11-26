@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -31,8 +32,15 @@ import androidx.compose.ui.unit.dp
 import ru.stasoft.mynotes.data.NoteEntity
 import ru.stasoft.mynotes.data.displayTitle
 
+private fun folderLabelOf(id: Long, by: Map<Long, NoteEntity>): String = when {
+    id == QUICK_CURRENT -> "Текущая папка"
+    id == QUICK_DAY -> "Папка дня (сегодняшняя)"
+    id == QUICK_ROOT -> "Главный экран"
+    else -> by[id]?.let { pathOf(it, by) } ?: "папка не найдена"
+}
+
 private fun presetPlace(p: QuickPreset, by: Map<Long, NoteEntity>, snippets: Map<Long, String>): String {
-    val folder = if (p.folderId < 0) "текущая папка" else by[p.folderId]?.let { pathOf(it, by) } ?: "папка не найдена"
+    val folder = folderLabelOf(p.folderId, by)
     val tpl = if (p.snippetId < 0) "пустая заметка" else snippets[p.snippetId] ?: "шаблон не найден"
     return "$folder · $tpl"
 }
@@ -125,7 +133,7 @@ private fun QuickPresetEditDialog(
     var snippet by remember { mutableStateOf(initial.snippetId) }
     var pick by remember { mutableStateOf(0) } // 1 папка, 2 шаблон
     val by = remember(all) { all.associateBy { it.id } }
-    val folderLabel = if (folder < 0) "Текущая папка" else by[folder]?.let { pathOf(it, by) } ?: "Папка не найдена"
+    val folderLabel = folderLabelOf(folder, by)
     val snippetLabel = if (snippet < 0) "Пустая заметка" else snippets.firstOrNull { it.first == snippet }?.second ?: "Шаблон не найден"
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -145,7 +153,7 @@ private fun QuickPresetEditDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val n = name.trim().ifEmpty { if (snippet >= 0) snippetLabel else if (folder >= 0) folderLabel.substringAfterLast(" / ") else "Заметка" }
+                val n = name.trim().ifEmpty { if (snippet >= 0) snippetLabel else if (folder >= 0 || folder == QUICK_DAY) folderLabel.substringAfterLast(" / ") else "Заметка" }
                 onSave(QuickPreset(n, folder, snippet))
             }) { Text("Сохранить") }
         },
@@ -156,12 +164,7 @@ private fun QuickPresetEditDialog(
             }
         },
     )
-    if (pick == 1) {
-        val opts = remember(all) {
-            listOf(-1L to "Текущая папка") + all.filter { it.isFolder }.map { it.id to pathOf(it, by) }.sortedBy { it.second.lowercase() }
-        }
-        PickDialog("Куда создавать", opts, withSearch = true, onDismiss = { pick = 0 }) { folder = it; pick = 0 }
-    }
+    if (pick == 1) FolderTreeDialog(all, folder, onDismiss = { pick = 0 }) { folder = it; pick = 0 }
     if (pick == 2) PickDialog("Из какого шаблона", listOf(-1L to "Пустая заметка") + snippets, withSearch = false, onDismiss = { pick = 0 }) { snippet = it; pick = 0 }
 }
 
@@ -179,6 +182,65 @@ private fun PickDialog(title: String, options: List<Pair<Long, String>>, withSea
                     items(shown) { (id, label) ->
                         Text(label, Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 10.dp))
                         HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+/** Выбор папки в раскрывающемся дереве; сверху — особые места: текущая папка, папка дня, главный экран. */
+@Composable
+private fun FolderTreeDialog(all: List<NoteEntity>, selected: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    val folders = remember(all) { all.filter { it.isFolder } }
+    val kids = remember(folders) { folders.groupBy { it.parentId }.mapValues { (_, v) -> v.sortedBy { it.displayTitle().lowercase() } } }
+    val by = remember(all) { all.associateBy { it.id } }
+    var open by remember(all) {
+        // Путь к выбранной папке раскрыт сразу.
+        val s = HashSet<Long>()
+        var c = by[selected]?.parentId
+        var g = 0
+        while (c != null && g++ < 40) { s.add(c); c = by[c]?.parentId }
+        mutableStateOf<Set<Long>>(s)
+    }
+    val rows = remember(kids, open) {
+        val out = ArrayList<Pair<NoteEntity, Int>>()
+        fun walk(parent: Long?, depth: Int) {
+            for (f in kids[parent].orEmpty()) {
+                out.add(f to depth)
+                if (f.id in open) walk(f.id, depth + 1)
+            }
+        }
+        walk(null, 0)
+        out
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Куда создавать") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                items(listOf(QUICK_CURRENT to "Текущая папка", QUICK_DAY to "📅 Папка дня (сегодняшняя)", QUICK_ROOT to "Главный экран")) { (id, label) ->
+                    Text(
+                        label,
+                        Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 10.dp),
+                        color = if (selected == id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                item { HorizontalDivider() }
+                items(rows) { (f, depth) ->
+                    val has = kids[f.id].orEmpty().isNotEmpty()
+                    Row(Modifier.fillMaxWidth().padding(start = (depth * 18).dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (!has) "" else if (f.id in open) "▾" else "▸",
+                            Modifier.width(36.dp).clickable(enabled = has) { open = if (f.id in open) open - f.id else open + f.id }.padding(vertical = 10.dp),
+                        )
+                        Text(
+                            "📁 " + f.displayTitle().ifBlank { "Без названия" },
+                            Modifier.weight(1f).clickable { onPick(f.id) }.padding(vertical = 10.dp),
+                            color = if (selected == f.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             }
