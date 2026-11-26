@@ -1330,6 +1330,16 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     private var autoDayTried: java.time.LocalDate? = null
 
+    /** Папка, внутри которой живут папки дней (год → месяц → день); -1 — искать по всей базе. */
+    var autoDayRoot by mutableStateOf(uiPrefs().getLong("auto_day_root", -1L))
+        private set
+
+    fun saveAutoDayRoot(id: Long) {
+        autoDayRoot = id
+        uiPrefs().edit().putLong("auto_day_root", id).apply()
+        autoDayTried = null
+    }
+
     /** График папки дня: 0 — каждый день, 1 — по дням недели (маска: пн=1 … вс=64), 2 — «N через M» от опорного дня. */
     var dayMode by mutableStateOf(uiPrefs().getInt("auto_day_mode", 0))
         private set
@@ -1407,30 +1417,31 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 uiPrefs().edit().putString("auto_day_filled", today.toString()).apply()
                 return snippets.size
             }
-            val existing = folders.firstOrNull { dateInTitle(it.title) == today }
+            val root: Long? = if (autoDayRoot >= 0 && dao.get(autoDayRoot) != null) autoDayRoot else null
+            val plan = ru.stasoft.mynotes.data.planDayPath(folders, root, today)
+            val existing = plan.existingId
             if (existing != null) {
                 autoDayTried = today
                 // Папка дня уже есть, но пуста (например, создана до выбора шаблонов): наполняем один раз.
-                val empty = dao.childrenOnce(existing.id).isEmpty()
+                val empty = dao.childrenOnce(existing).isEmpty()
                 val already = uiPrefs().getString("auto_day_filled", "") == today.toString()
                 if (empty && (manual || !already)) {
-                    val n = fill(existing.id)
+                    val n = fill(existing)
                     message = if (n > 0) "В папку дня добавлено заметок: $n" else "Не выбраны шаблоны для нового дня"
                 } else if (manual) message = "Папка сегодняшнего дня уже есть"
                 return@launch
             }
-            val last = folders.filter { dateInTitle(it.title) != null }.maxByOrNull { dateInTitle(it.title)!! }
-            if (last == null) {
-                if (manual) message = "Сначала создайте одну папку дня вручную, например «${formatLike("", today)}»: по ней я пойму, где и в каком формате создавать"
+            if (root == null && folders.none { dateInTitle(it.title) != null }) {
+                if (manual) message = "Выберите папку, где создавать дни («Где создавать»), либо создайте вручную одну папку дня, например «${formatLike("", today)}»"
                 return@launch
             }
             autoDayTried = today
-            val title = formatLike(last.title, today)
-            val fid = dao.insert(
-                NoteEntity(parentId = last.parentId, isFolder = true, title = title, sortIndex = dao.maxSort(last.parentId) + 1, createdAt = now, updatedAt = now),
-            )
-            val n = fill(fid)
-            message = "Создана папка дня «$title»" + if (n == 0) "" else " и заметок: $n"
+            var cur = plan.parentId
+            for (t in plan.toCreate) {
+                cur = dao.insert(NoteEntity(parentId = cur, isFolder = true, title = t, sortIndex = dao.maxSort(cur) + 1, createdAt = now, updatedAt = now))
+            }
+            val n = fill(cur!!)
+            message = "Создана папка дня «${plan.toCreate.last()}»" + if (n == 0) "" else " и заметок: $n"
         }
     }
 

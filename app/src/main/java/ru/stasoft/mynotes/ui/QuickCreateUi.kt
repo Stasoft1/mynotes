@@ -203,7 +203,12 @@ private fun PickDialog(title: String, options: List<Pair<Long, String>>, withSea
 
 /** Выбор папки в раскрывающемся дереве; сверху — особые места: текущая папка, папка дня, главный экран. */
 @Composable
-private fun FolderTreeDialog(all: List<NoteEntity>, selected: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+internal fun FolderTreeDialog(
+    all: List<NoteEntity>, selected: Long, onDismiss: () -> Unit,
+    specials: List<Pair<Long, String>> = listOf(QUICK_CURRENT to "Текущая папка", QUICK_ROOT to "Главный экран"),
+    title: String = "Куда создавать",
+    onPick: (Long) -> Unit,
+) {
     val folders = remember(all) { all.filter { it.isFolder } }
     val kids = remember(folders) { folders.groupBy { it.parentId }.mapValues { (_, v) -> v.sortedBy { it.displayTitle().lowercase() } } }
     val by = remember(all) { all.associateBy { it.id } }
@@ -228,10 +233,10 @@ private fun FolderTreeDialog(all: List<NoteEntity>, selected: Long, onDismiss: (
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Куда создавать") },
+        title = { Text(title) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                items(listOf(QUICK_CURRENT to "Текущая папка", QUICK_ROOT to "Главный экран")) { (id, label) ->
+                items(specials) { (id, label) ->
                     Text(
                         label,
                         Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 10.dp),

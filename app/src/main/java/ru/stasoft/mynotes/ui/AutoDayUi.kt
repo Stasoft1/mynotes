@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
@@ -40,11 +41,27 @@ fun AutoDaySettingsSection(vm: AppViewModel) {
         AppSwitch(checked = vm.autoDay, onCheckedChange = { vm.updateAutoDay(it) })
     }
     Text(
-        "Когда вы откроете приложение в новый день, рядом с последней папкой дня (в том же формате даты) появится папка с сегодняшним числом, а в ней заметки из выбранных ниже шаблонов.",
+        "Когда вы откроете приложение в новый день, в выбранной папке (или рядом с последней папкой дня) появится папка с сегодняшним числом, в том же формате даты, а в ней заметки из выбранных ниже шаблонов.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp),
     )
+    var all by remember { mutableStateOf<List<ru.stasoft.mynotes.data.NoteEntity>>(emptyList()) }
+    var pickRoot by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(vm.autoDayRoot, pickRoot) { all = vm.allNotesOnce() }
+    val byId = remember(all) { all.associateBy { it.id } }
+    Column(Modifier.fillMaxWidth().clickable { pickRoot = true }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("Где создавать", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        Text("📁 " + (byId[vm.autoDayRoot]?.let { pathOf(it, byId) } ?: "Вся база: по уже имеющимся папкам дней"))
+        Text(
+            "Выберите папку, внутри которой лежат папки дней (например «Работа»). Недостающие год и месяц создаются сами: Работа / 2026 / Ноябрь / 26.11.26.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (pickRoot) FolderTreeDialog(
+        all, vm.autoDayRoot, onDismiss = { pickRoot = false },
+        specials = listOf(-1L to "Вся база (по уже имеющимся папкам дней)"), title = "Где создавать папки дней",
+    ) { vm.saveAutoDayRoot(it); pickRoot = false }
     Text("В какие дни создавать:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         listOf("Каждый день", "По дням недели", "График «через»").forEachIndexed { i, l ->

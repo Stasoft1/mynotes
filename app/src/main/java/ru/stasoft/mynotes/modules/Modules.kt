@@ -49,6 +49,11 @@ object Modules {
         if (ready) return
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         enabled = if (p.contains("on")) p.getStringSet("on", emptySet())!!.toSet() else DEFAULT_ON
+        // Папка дня стала модулем позже: в личной редакции у владельца она должна остаться включённой (один раз).
+        if (BuildConfig.PERSONAL && !p.getBoolean("day_migrated", false)) {
+            enabled = enabled + "day"
+            p.edit().putStringSet("on", enabled).putBoolean("day_migrated", true).apply()
+        }
         ready = true
     }
 
