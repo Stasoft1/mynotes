@@ -89,7 +89,7 @@ private fun below(sorted: DoubleArray?, x: Double): Double? {
  * наибольшее показание минус ближайшее меньшее показание до неё (конец предыдущего периода). Для заметки это
  * дистанция от предыдущего показания. Порядок записей в дереве не важен.
  */
-fun computeNumbers(rows: List<NumRow>, defaultCar: String? = null): Map<Long, List<Pair<String, Double>>> {
+fun computeNumbers(rows: List<NumRow>, defaultCar: String? = null, ownCars: Set<String> = emptySet()): Map<Long, List<Pair<String, Double>>> {
     if (rows.none { it.isFolder && it.varsJson.isNotEmpty() }) return emptyMap()
     val kids = HashMap<Long?, MutableList<NumRow>>()
     for (r in rows) kids.getOrPut(r.parentId) { mutableListOf() }.add(r)
@@ -193,6 +193,8 @@ fun computeNumbers(rows: List<NumRow>, defaultCar: String? = null): Map<Long, Li
                         for ((k, a) in raw.orEmpty()) {
                             if (!k.startsWith(d.name + "\u0000")) continue
                             val car = k.substringAfter('\u0000')
+                            // Пробег папок — только по основной машине: чужая (например, жены) в общий итог не идёт.
+                            if (ownCars.isNotEmpty() && car !in ownCars) continue
                             val prev = below(readings[d.fieldName() + "|" + car], a.min)
                             val value = if (prev != null) a.max - prev else if (a.max > a.min) a.max - a.min else null
                             if (value != null) { total += value; any = true }

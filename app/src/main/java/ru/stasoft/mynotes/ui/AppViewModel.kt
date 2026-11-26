@@ -179,8 +179,11 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     try {
                         val rows = db.notes().numRows()
                         // Прирост пробега считается по каждой машине отдельно; без «Авто:» — машина по умолчанию.
-                        val dc = if (Modules.on("auto")) (cs.firstOrNull { it.isDefault } ?: cs.firstOrNull())?.name else null
-                        withContext(Dispatchers.Default) { computeNumbers(rows, dc) }
+                        val own = if (Modules.on("auto")) (cs.firstOrNull { it.isDefault } ?: cs.firstOrNull()) else null
+                        val dc = own?.name
+                        // Названия и короткие имена основной машины: только её пробег идёт в итоги папок.
+                        val ownNames = if (own == null || cs.size < 2) emptySet() else (listOf(own.name) + own.aliases.split(',')).map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+                        withContext(Dispatchers.Default) { computeNumbers(rows, dc, ownNames) }
                     } catch (_: Exception) {
                         emptyMap()
                     }
