@@ -1647,21 +1647,17 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     if (target == null) message = "Папка из заготовки не найдена, заметка создана в текущей" else parent = target.id
                 }
                 p.folderId == QUICK_ROOT -> parent = null
-                p.folderId == QUICK_DAY -> {
-                    val today = java.time.LocalDate.now()
-                    val folders = dao.folderTitles().first()
-                    val ex = folders.firstOrNull { dateInTitle(it.title) == today }
-                    if (ex != null) { target = dao.get(ex.id); parent = ex.id }
-                    else {
-                        val last = folders.filter { dateInTitle(it.title) != null }.maxByOrNull { dateInTitle(it.title)!! }
-                        if (last == null) message = "Папка дня не найдена: создайте одну папку с датой в названии. Заметка создана в текущей папке"
-                        else {
-                            val fid = dao.insert(
-                                NoteEntity(parentId = last.parentId, isFolder = true, title = formatLike(last.title, today), sortIndex = dao.maxSort(last.parentId) + 1, createdAt = now, updatedAt = now),
-                            )
-                            target = dao.get(fid); parent = fid
-                        }
+            }
+            if (p.day) {
+                val base: Long? = if (p.folderId == QUICK_ROOT) null else parent
+                val plan = ru.stasoft.mynotes.data.planDayPath(dao.folderTitles().first(), base, java.time.LocalDate.now())
+                if (plan.existingId != null) { target = dao.get(plan.existingId); parent = plan.existingId }
+                else {
+                    var cur = plan.parentId
+                    for (t in plan.toCreate) {
+                        cur = dao.insert(NoteEntity(parentId = cur, isFolder = true, title = t, sortIndex = dao.maxSort(cur) + 1, createdAt = now, updatedAt = now))
                     }
+                    target = cur?.let { dao.get(it) }; parent = cur
                 }
             }
             val sn = if (p.snippetId >= 0) allSnippets.value.firstOrNull { it.id == p.snippetId } else null
@@ -2157,12 +2153,12 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 }
 
-/** Заготовка быстрой заметки: [folderId]: ≥ 0 — папка, -1 текущая, -2 папка сегодняшнего дня (создаётся, если её нет), -3 главный экран, [snippetId] < 0 — пустая заметка. */
+/** Заготовка быстрой заметки: [folderId]: ≥ 0 — папка, -1 текущая, [day] — внутри выбранной папки искать (или создавать: год → месяц → день) папку сегодняшнего дня, -3 главный экран, [snippetId] < 0 — пустая заметка. */
 const val QUICK_CURRENT = -1L
 const val QUICK_DAY = -2L
 const val QUICK_ROOT = -3L
 
-data class QuickPreset(val name: String, val folderId: Long = -1, val snippetId: Long = -1)
+data class QuickPreset(val name: String, val folderId: Long = -1, val snippetId: Long = -1, val day: Boolean = false)
 
 fun parseQuickPresets(json: String): List<QuickPreset> {
     if (json.isBlank()) return emptyList()
@@ -2170,13 +2166,13 @@ fun parseQuickPresets(json: String): List<QuickPreset> {
         val a = org.json.JSONArray(json)
         (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
-            QuickPreset(o.optString("n"), o.optLong("f", -1), o.optLong("s", -1))
+            o.optLong("f", -1).let { f -> if (f == -2L) QuickPreset(o.optString("n"), QUICK_ROOT, o.optLong("s", -1), true) else QuickPreset(o.optString("n"), f, o.optLong("s", -1), o.optBoolean("d", false)) }
         }
     } catch (_: Exception) { emptyList() }
 }
 
 fun quickPresetsToJson(l: List<QuickPreset>): String {
     val a = org.json.JSONArray()
-    l.forEach { a.put(org.json.JSONObject().put("n", it.name).put("f", it.folderId).put("s", it.snippetId)) }
+    l.forEach { a.put(org.json.JSONObject().put("n", it.name).put("f", it.folderId).put("s", it.snippetId).put("d", it.day)) }
     return a.toString()
 }

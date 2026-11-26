@@ -34,13 +34,12 @@ import ru.stasoft.mynotes.data.displayTitle
 
 private fun folderLabelOf(id: Long, by: Map<Long, NoteEntity>): String = when {
     id == QUICK_CURRENT -> "Текущая папка"
-    id == QUICK_DAY -> "Папка дня (сегодняшняя)"
     id == QUICK_ROOT -> "Главный экран"
     else -> by[id]?.let { pathOf(it, by) } ?: "папка не найдена"
 }
 
 private fun presetPlace(p: QuickPreset, by: Map<Long, NoteEntity>, snippets: Map<Long, String>): String {
-    val folder = folderLabelOf(p.folderId, by)
+    val folder = folderLabelOf(p.folderId, by) + if (p.day) " → папка дня" else ""
     val tpl = if (p.snippetId < 0) "пустая заметка" else snippets[p.snippetId] ?: "шаблон не найден"
     return "$folder · $tpl"
 }
@@ -131,6 +130,7 @@ private fun QuickPresetEditDialog(
     var name by remember { mutableStateOf(initial.name) }
     var folder by remember { mutableStateOf(initial.folderId) }
     var snippet by remember { mutableStateOf(initial.snippetId) }
+    var day by remember { mutableStateOf(initial.day) }
     var pick by remember { mutableStateOf(0) } // 1 папка, 2 шаблон
     val by = remember(all) { all.associateBy { it.id } }
     val folderLabel = folderLabelOf(folder, by)
@@ -142,8 +142,18 @@ private fun QuickPresetEditDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название в списке") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Column(Modifier.fillMaxWidth().clickable { pick = 1 }) {
-                    Text("Куда создавать", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(if (day) "Где искать папку дня" else "Куда создавать", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Text("📁 $folderLabel")
+                }
+                Row(Modifier.fillMaxWidth().clickable { day = !day }, verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(checked = day, onCheckedChange = { day = it })
+                    Column {
+                        Text("Папка дня")
+                        Text(
+                            "В выбранной папке найти папку сегодняшней даты. Если её нет, создать: год → месяц → день (по образцу уже имеющихся).",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Column(Modifier.fillMaxWidth().clickable { pick = 2 }) {
                     Text("Из какого шаблона", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -153,8 +163,8 @@ private fun QuickPresetEditDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val n = name.trim().ifEmpty { if (snippet >= 0) snippetLabel else if (folder >= 0 || folder == QUICK_DAY) folderLabel.substringAfterLast(" / ") else "Заметка" }
-                onSave(QuickPreset(n, folder, snippet))
+                val n = name.trim().ifEmpty { if (snippet >= 0) snippetLabel else if (folder >= 0) folderLabel.substringAfterLast(" / ") else "Заметка" }
+                onSave(QuickPreset(n, folder, snippet, day))
             }) { Text("Сохранить") }
         },
         dismissButton = {
@@ -221,7 +231,7 @@ private fun FolderTreeDialog(all: List<NoteEntity>, selected: Long, onDismiss: (
         title = { Text("Куда создавать") },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                items(listOf(QUICK_CURRENT to "Текущая папка", QUICK_DAY to "📅 Папка дня (сегодняшняя)", QUICK_ROOT to "Главный экран")) { (id, label) ->
+                items(listOf(QUICK_CURRENT to "Текущая папка", QUICK_ROOT to "Главный экран")) { (id, label) ->
                     Text(
                         label,
                         Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 10.dp),
