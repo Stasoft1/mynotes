@@ -275,6 +275,7 @@ fun TreeScreen(vm: AppViewModel) {
         }
     }
     VoiceDialog(vm, onRetry = { startSpeech() })
+    PhotoNoteDialog(vm)
 
     // Новый день: при возвращении в приложение создаём папку сегодняшнего дня, если включено.
     val dayOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current

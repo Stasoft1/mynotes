@@ -1476,8 +1476,6 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val spoken: String, val title: String, val body: String,
         val folderId: Long?, val folderName: String, val viaAi: Boolean,
         val checklist: Boolean = false, val iconKey: String? = null, val iconColor: Int? = null, val remindAt: Long? = null,
-        /** Разбор по фото: снимок, который прикрепится к заметке. */
-        val photoUri: Uri? = null,
     )
 
     var voiceDraft by mutableStateOf<VoiceDraft?>(null)
@@ -1618,51 +1616,134 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Фото → черновик заметки: QR кассового чека читается на телефоне, текст и товары — через GigaChat. */
+    // ---------- заметка по фото («бумажка» → чек или текст) ----------
+
+    /** Что распознано на снимке. Для чека — поля; иначе просто текст. */
+    data class PhotoData(
+        val uri: Uri, val receipt: Boolean, val store: String = "", val dateText: String = "", val sum: String = "",
+        val category: String = "", val items: List<String> = emptyList(), val text: String = "", val source: String = "",
+    )
+
+    var photoDraft by mutableStateOf<PhotoData?>(null)
+
+    private fun parseAiPhoto(uri: Uri, ai: String): PhotoData {
+        val lines = ai.lines().map { it.trim() }
+        val isReceipt = lines.firstOrNull { it.isNotEmpty() }?.let { it.startsWith("ТИП", true) && it.contains("чек", true) } == true
+        fun field(k: String) = lines.firstOrNull { it.startsWith(k, true) && it.contains(':') }?.substringAfter(':')?.trim().orEmpty()
+        if (isReceipt) {
+            val items = lines.dropWhile { !it.startsWith("Товары", true) }.drop(1).filter { it.isNotEmpty() }
+            return PhotoData(uri, true, field("Магазин"), field("Дата"), field("Сумма").replace(',', '.').replace(Regex("[^0-9.]"), "").trimEnd('.'), field("Категория"), items, source = "GigaChat")
+        }
+        val body = ai.lines().dropWhile { it.trim().startsWith("ТИП", true) }.joinToString("\n").trim()
+        return PhotoData(uri, false, text = if (body.startsWith("Текст не найден")) "" else body, source = "GigaChat")
+    }
+
+    /** Фото → разбор: QR кассового чека читается на телефоне, остальное (чек без QR, любая бумага с текстом) — через GigaChat. */
     fun photoInput(uri: Uri) {
         viewModelScope.launch {
             voiceBusy = true
             try {
                 val bmp = withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.PhotoRecog.load(app, uri, 2400) }
                 if (bmp == null) { message = "Не удалось открыть снимок"; return@launch }
-                val receipt = withContext(Dispatchers.Default) {
+                val qr = withContext(Dispatchers.Default) {
                     ru.stasoft.mynotes.data.PhotoRecog.scanQr(bmp).firstNotNullOfOrNull { ru.stasoft.mynotes.data.parseReceiptQr(it) }
                 }
-                var text: String? = null
-                var viaAi = false
+                var data: PhotoData? = null
                 if (gigaActive) {
                     try {
                         val jpeg = withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.PhotoRecog.jpeg(bmp) }
-                        val prompt = if (receipt != null)
-                            "Это фото кассового чека. Ответь строго в формате, без пояснений:\nМагазин: <название магазина или организации>\nТовары:\n<товар> — <цена>\n(по одной строке на товар). Если что-то не читается, пропусти."
-                        else
-                            "Перепиши весь текст с изображения дословно, сохраняя строки и их порядок. Ничего не добавляй и не поясняй. Если текста нет, ответь: «Текст не найден»."
-                        text = ru.stasoft.mynotes.data.GigaChat.askImage(app, gigaKey, prompt, jpeg).trim()
-                        viaAi = true
+                        val ai = ru.stasoft.mynotes.data.GigaChat.askImage(
+                            app, gigaKey,
+                            "Определи, что на фото. Если это кассовый или товарный чек, ответь строго в таком виде, без пояснений:\n" +
+                                "ТИП: чек\nМагазин: <название магазина или организации>\nДата: <ДД.ММ.ГГГГ ЧЧ:ММ>\nСумма: <итог числом>\n" +
+                                "Категория: <одно-два слова: Продукты, Кафе, Транспорт, Топливо, Аптека, Дом, Одежда, Другое>\nТовары:\n<товар> — <цена>\n(по строке на товар).\n" +
+                                "Если это не чек, ответь: ТИП: текст, затем с новой строки весь текст с фото дословно, сохраняя строки. Если текста нет: «Текст не найден».",
+                            jpeg,
+                        )
+                        data = parseAiPhoto(uri, ai)
                     } catch (e: javax.net.ssl.SSLException) {
                         message = "Нужно разрешить доверие сертификату Минцифры: Настройки → Голосовой ввод"
                     } catch (e: Exception) {
                         message = "GigaChat не распознал фото: ${e.message?.take(120)}"
                     }
                 }
-                val parent = folderId.value
-                val folderName = path.lastOrNull()?.title?.ifBlank { null } ?: "Корень"
-                val draft = if (receipt != null) {
-                    val store = text?.lineSequence()?.firstOrNull { it.trim().startsWith("Магазин", true) }?.substringAfter(':')?.trim().orEmpty()
-                    val items = text?.lines()?.dropWhile { !it.trim().startsWith("Товары", true) }?.drop(1)?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-                    val body = "Магазин: $store\nСумма: ${receipt.sumText}\nКатегория: \nПримечание: чек от ${receipt.dateText}" +
-                        if (items.isEmpty()) "" else "\n" + items.joinToString("\n")
-                    VoiceDraft("QR чека: ${receipt.dateText}, ${receipt.sumText} ₽" + if (viaAi) ", товары — GigaChat" else "", "", body, parent, folderName, viaAi, photoUri = uri)
-                } else if (text != null) {
-                    VoiceDraft("Текст с фото (GigaChat)", "", if (text.startsWith("Текст не найден")) "" else text, parent, folderName, true, photoUri = uri)
-                } else {
-                    if (!gigaActive) message = "QR чека не найден. Для чтения текста с фото подключите GigaChat (Настройки → Голосовой ввод)"
-                    VoiceDraft("QR не найден", "", "", parent, folderName, false, photoUri = uri)
+                if (qr != null) {
+                    // Сумма и дата из QR точнее распознавания по картинке.
+                    val d0 = data?.takeIf { it.receipt } ?: PhotoData(uri, true)
+                    data = d0.copy(sum = qr.sumText, dateText = qr.dateText.ifBlank { d0.dateText }, source = "QR" + if (d0.source.isNotEmpty()) " + GigaChat" else "")
                 }
-                voiceDraft = draft
+                if (data == null) {
+                    if (!gigaActive) message = "QR чека не найден. Для чтения текста с фото подключите GigaChat (Настройки → Голосовой ввод)"
+                    data = PhotoData(uri, false, source = "не распознано")
+                }
+                photoDraft = data
             } finally {
                 voiceBusy = false
             }
+        }
+    }
+
+    /** Текст заметки из распознанного: чек подставляется в выбранный шаблон (поля «Магазин:», «Сумма:»…), иначе в простой формат. */
+    suspend fun photoBody(d: PhotoData, snippetId: Long): String {
+        if (!d.receipt) return d.text
+        val note = "чек" + if (d.dateText.isNotBlank()) " от ${d.dateText}" else ""
+        val values = mapOf("магазин" to d.store, "сумма" to d.sum, "категория" to d.category, "примечание" to note, "дата" to d.dateText.substringBefore(' '))
+        val itemsText = if (d.items.isEmpty()) "" else "\n" + d.items.joinToString("\n")
+        val sn = allSnippets.value.firstOrNull { it.id == snippetId }
+        if (sn != null) {
+            val (text, _) = expandTemplate(sn.text, sn.spansJson, folderId.value)
+            var filled = 0
+            val out = text.lines().joinToString("\n") { line ->
+                val k = line.substringBefore(':', "").trim().lowercase()
+                val v = values[k]
+                if (line.contains(':') && v != null && line.substringAfter(':').isBlank() && v.isNotBlank()) { filled++; line.trimEnd() + " " + v } else line
+            }
+            if (filled > 0) return out.trimEnd() + itemsText
+        }
+        return "Магазин: ${d.store}\nСумма: ${d.sum}\nКатегория: ${d.category}\nПримечание: $note$itemsText"
+    }
+
+    /** Шаблон по умолчанию для чека: тот, в названии которого есть «расход»; иначе последний выбранный. */
+    fun defaultReceiptSnippet(): Long {
+        val saved = uiPrefs().getLong("photo_snippet", Long.MIN_VALUE)
+        if (saved != Long.MIN_VALUE) return saved
+        return allSnippets.value.firstOrNull { it.label.contains("расход", true) }?.id ?: -1L
+    }
+
+    fun photoFolderChoice(): Pair<Long, Boolean> = uiPrefs().getLong("photo_folder", QUICK_CURRENT) to uiPrefs().getBoolean("photo_day", false)
+
+    /** Создаёт заметку по фото в выбранном месте (папка, при необходимости — папка сегодняшнего дня) и прикрепляет снимок. */
+    fun photoCommit(d: PhotoData, title: String, body: String, folder: Long, day: Boolean, snippetId: Long, attach: Boolean) {
+        val dao = dao() ?: return
+        val now = System.currentTimeMillis()
+        uiPrefs().edit().putLong("photo_folder", folder).putBoolean("photo_day", day).putLong("photo_snippet", snippetId).apply()
+        viewModelScope.launch {
+            var parent: Long? = when {
+                folder >= 0 -> dao.get(folder)?.id ?: folderId.value
+                folder == QUICK_ROOT -> null
+                else -> folderId.value
+            }
+            if (day) {
+                val plan = ru.stasoft.mynotes.data.planDayPath(dao.folderTitles().first(), parent, java.time.LocalDate.now())
+                if (plan.existingId != null) parent = plan.existingId
+                else {
+                    var cur = plan.parentId
+                    for (t in plan.toCreate) cur = dao.insert(NoteEntity(parentId = cur, isFolder = true, title = t, sortIndex = dao.maxSort(cur) + 1, createdAt = now, updatedAt = now))
+                    parent = cur
+                }
+            }
+            val id = dao.insert(NoteEntity(parentId = parent, title = title.trim(), body = body, sortIndex = dao.maxSort(parent) + 1, createdAt = now, updatedAt = now))
+            if (attach) {
+                try {
+                    val name = withContext(Dispatchers.IO) { ru.stasoft.mynotes.data.PhotoStore.save(app, d.uri) }
+                    dao.insertPhoto(ru.stasoft.mynotes.data.PhotoEntity(noteId = id, file = name, createdAt = now))
+                } catch (e: Exception) {
+                    message = "Заметка создана, но фото не прикрепилось: ${e.message}"
+                }
+            }
+            selectedId = id
+            photoDraft = null
+            if (message == null) message = "Заметка создана в «${parent?.let { dao.get(it)?.title } ?: "корне"}»"
         }
     }
 
@@ -1677,17 +1758,9 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     checklist = asList, iconKey = d.iconKey, iconColorArgb = d.iconColor, reminderAt = d.remindAt,
                 ),
             )
-            d.photoUri?.let { u ->
-                try {
-                    val name = withContext(Dispatchers.IO) { ru.stasoft.mynotes.data.PhotoStore.save(app, u) }
-                    dao.insertPhoto(ru.stasoft.mynotes.data.PhotoEntity(noteId = id, file = name, createdAt = now))
-                } catch (e: Exception) {
-                    message = "Заметка создана, но фото не прикрепилось: ${e.message}"
-                }
-            }
             selectedId = id
             voiceDraft = null
-            if (message == null) message = "Заметка создана в «${d.folderName}»"
+            message = "Заметка создана в «${d.folderName}»"
         }
     }
 

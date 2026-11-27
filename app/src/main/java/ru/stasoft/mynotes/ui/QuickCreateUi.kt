@@ -184,7 +184,7 @@ private fun QuickPresetEditDialog(
 }
 
 @Composable
-private fun PickDialog(title: String, options: List<Pair<Long, String>>, withSearch: Boolean, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+internal fun PickDialog(title: String, options: List<Pair<Long, String>>, withSearch: Boolean, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
     var q by remember { mutableStateOf("") }
     val shown = remember(q, options) { options.filter { q.isBlank() || it.second.contains(q, ignoreCase = true) }.take(100) }
     AlertDialog(
