@@ -1476,6 +1476,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         val spoken: String, val title: String, val body: String,
         val folderId: Long?, val folderName: String, val viaAi: Boolean,
         val checklist: Boolean = false, val iconKey: String? = null, val iconColor: Int? = null, val remindAt: Long? = null,
+        /** Разбор по фото: снимок, который прикрепится к заметке. */
+        val photoUri: Uri? = null,
     )
 
     var voiceDraft by mutableStateOf<VoiceDraft?>(null)
@@ -1616,6 +1618,54 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Фото → черновик заметки: QR кассового чека читается на телефоне, текст и товары — через GigaChat. */
+    fun photoInput(uri: Uri) {
+        viewModelScope.launch {
+            voiceBusy = true
+            try {
+                val bmp = withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.PhotoRecog.load(app, uri, 2400) }
+                if (bmp == null) { message = "Не удалось открыть снимок"; return@launch }
+                val receipt = withContext(Dispatchers.Default) {
+                    ru.stasoft.mynotes.data.PhotoRecog.scanQr(bmp).firstNotNullOfOrNull { ru.stasoft.mynotes.data.parseReceiptQr(it) }
+                }
+                var text: String? = null
+                var viaAi = false
+                if (gigaActive) {
+                    try {
+                        val jpeg = withContext(Dispatchers.Default) { ru.stasoft.mynotes.data.PhotoRecog.jpeg(bmp) }
+                        val prompt = if (receipt != null)
+                            "Это фото кассового чека. Ответь строго в формате, без пояснений:\nМагазин: <название магазина или организации>\nТовары:\n<товар> — <цена>\n(по одной строке на товар). Если что-то не читается, пропусти."
+                        else
+                            "Перепиши весь текст с изображения дословно, сохраняя строки и их порядок. Ничего не добавляй и не поясняй. Если текста нет, ответь: «Текст не найден»."
+                        text = ru.stasoft.mynotes.data.GigaChat.askImage(app, gigaKey, prompt, jpeg).trim()
+                        viaAi = true
+                    } catch (e: javax.net.ssl.SSLException) {
+                        message = "Нужно разрешить доверие сертификату Минцифры: Настройки → Голосовой ввод"
+                    } catch (e: Exception) {
+                        message = "GigaChat не распознал фото: ${e.message?.take(120)}"
+                    }
+                }
+                val parent = folderId.value
+                val folderName = path.lastOrNull()?.title?.ifBlank { null } ?: "Корень"
+                val draft = if (receipt != null) {
+                    val store = text?.lineSequence()?.firstOrNull { it.trim().startsWith("Магазин", true) }?.substringAfter(':')?.trim().orEmpty()
+                    val items = text?.lines()?.dropWhile { !it.trim().startsWith("Товары", true) }?.drop(1)?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+                    val body = "Магазин: $store\nСумма: ${receipt.sumText}\nКатегория: \nПримечание: чек от ${receipt.dateText}" +
+                        if (items.isEmpty()) "" else "\n" + items.joinToString("\n")
+                    VoiceDraft("QR чека: ${receipt.dateText}, ${receipt.sumText} ₽" + if (viaAi) ", товары — GigaChat" else "", "", body, parent, folderName, viaAi, photoUri = uri)
+                } else if (text != null) {
+                    VoiceDraft("Текст с фото (GigaChat)", "", if (text.startsWith("Текст не найден")) "" else text, parent, folderName, true, photoUri = uri)
+                } else {
+                    if (!gigaActive) message = "QR чека не найден. Для чтения текста с фото подключите GigaChat (Настройки → Голосовой ввод)"
+                    VoiceDraft("QR не найден", "", "", parent, folderName, false, photoUri = uri)
+                }
+                voiceDraft = draft
+            } finally {
+                voiceBusy = false
+            }
+        }
+    }
+
     fun voiceCommit(d: VoiceDraft, title: String, body: String, asList: Boolean = d.checklist) {
         val dao = dao() ?: return
         val now = System.currentTimeMillis()
@@ -1627,9 +1677,17 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                     checklist = asList, iconKey = d.iconKey, iconColorArgb = d.iconColor, reminderAt = d.remindAt,
                 ),
             )
+            d.photoUri?.let { u ->
+                try {
+                    val name = withContext(Dispatchers.IO) { ru.stasoft.mynotes.data.PhotoStore.save(app, u) }
+                    dao.insertPhoto(ru.stasoft.mynotes.data.PhotoEntity(noteId = id, file = name, createdAt = now))
+                } catch (e: Exception) {
+                    message = "Заметка создана, но фото не прикрепилось: ${e.message}"
+                }
+            }
             selectedId = id
             voiceDraft = null
-            message = "Заметка создана в «${d.folderName}»"
+            if (message == null) message = "Заметка создана в «${d.folderName}»"
         }
     }
 

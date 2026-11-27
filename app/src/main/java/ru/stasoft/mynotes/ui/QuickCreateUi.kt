@@ -46,13 +46,18 @@ private fun presetPlace(p: QuickPreset, by: Map<Long, NoteEntity>, snippets: Map
 
 /** Список заготовок, который раскрывается по долгому нажатию на «+». */
 @Composable
-fun QuickMenu(vm: AppViewModel, expanded: Boolean, onDismiss: () -> Unit, onConfigure: () -> Unit) {
+fun QuickMenu(vm: AppViewModel, expanded: Boolean, onDismiss: () -> Unit, onPhoto: () -> Unit, onConfigure: () -> Unit) {
     val snippets by vm.allSnippets.collectAsState()
     var all by remember { mutableStateOf<List<NoteEntity>>(emptyList()) }
     LaunchedEffect(expanded) { if (expanded) all = vm.allNotesOnce() }
     val by = remember(all) { all.associateBy { it.id } }
     val sn = remember(snippets) { snippets.associate { it.id to it.label } }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Column { Text("📷 Заметка по фото"); Text("QR чека, текст с бумаги", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+            onClick = { onDismiss(); onPhoto() },
+        )
+        HorizontalDivider()
         if (vm.quickPresets.isEmpty()) {
             Text("Заготовок пока нет. Заготовка: папка + шаблон, создаётся одним нажатием.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 260.dp), style = MaterialTheme.typography.bodySmall)
         }

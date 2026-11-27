@@ -225,6 +225,7 @@ fun TreeScreen(vm: AppViewModel) {
     var showSnippets by remember { mutableStateOf(false) }
     var showQuick by remember { mutableStateOf(false) }
     var showQuickCfg by remember { mutableStateOf(false) }
+    val openPhotoNote = rememberPhotoNote(vm)
     if (showQuickCfg) QuickPresetsDialog(vm) { showQuickCfg = false }
     LaunchedEffect(vm.reopenTemplates) {
         if (vm.reopenTemplates) {
@@ -298,7 +299,7 @@ fun TreeScreen(vm: AppViewModel) {
                 if (folderId != null) StripButton(Icons.AutoMirrored.Filled.ArrowBack, "Назад") { vm.goUp() }
                 Box {
                     StripButton(Icons.Filled.Add, "Создать заметку (долгое нажатие — быстрые заметки)", onLongClick = { showQuick = true }) { vm.newNote() }
-                    QuickMenu(vm, showQuick, { showQuick = false }, onConfigure = { showQuick = false; showQuickCfg = true })
+                    QuickMenu(vm, showQuick, { showQuick = false }, onPhoto = { openPhotoNote() }, onConfigure = { showQuick = false; showQuickCfg = true })
                 }
                 StripButton(Icons.Filled.CreateNewFolder, "Создать папку") { vm.newChild() }
                 StripButton(Icons.Filled.Mic, "Голосовая заметка") { startSpeech() }

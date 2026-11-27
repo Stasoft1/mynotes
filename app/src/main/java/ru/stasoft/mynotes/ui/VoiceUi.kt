@@ -39,12 +39,12 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
     var asList by remember(d) { mutableStateOf(d.checklist) }
     AlertDialog(
         onDismissRequest = { vm.voiceDraft = null },
-        title = { Text("Голосовая заметка") },
+        title = { Text(if (d.photoUri != null) "Заметка по фото" else "Голосовая заметка") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Папка: ${d.folderName}", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Услышал: ${d.spoken}",
+                    (if (d.photoUri != null) "Распознано: " else "Услышал: ") + d.spoken,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -81,8 +81,8 @@ fun VoiceDialog(vm: AppViewModel, onRetry: () -> Unit) {
         confirmButton = { TextButton(onClick = { vm.voiceCommit(d, title, body, asList) }) { Text("Создать") } },
         dismissButton = {
             Row {
-                TextButton(onClick = { vm.voiceDraft = null; onRetry() }) { Text("Заново") }
-                if (vm.gigaActive && !d.viaAi) {
+                if (d.photoUri == null) TextButton(onClick = { vm.voiceDraft = null; onRetry() }) { Text("Заново") }
+                if (d.photoUri == null && vm.gigaActive && !d.viaAi) {
                     TextButton(onClick = { vm.voiceDraft = null; vm.voiceInput(d.spoken, forceAi = true) }) { Text("ИИ") }
                 }
                 TextButton(onClick = { vm.voiceDraft = null }) { Text("Отмена") }

@@ -101,4 +101,6 @@ dependencies {
     // Карта (OpenStreetMap, без ключей) и геозоны для напоминаний «когда буду в месте».
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    // Чтение QR-кода кассового чека на телефоне, без интернета.
+    implementation("com.google.zxing:core:3.5.3")
 }

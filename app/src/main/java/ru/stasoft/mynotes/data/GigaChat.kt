@@ -28,6 +28,7 @@ object GigaChat {
     private const val HOST = "ngw.devices.sberbank.ru"
     private const val OAUTH = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     private const val CHAT = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+    private const val FILES = "https://gigachat.devices.sberbank.ru/api/v1/files"
     private var token: String? = null
     private var tokenExp = 0L
 
@@ -93,7 +94,9 @@ object GigaChat {
         }
     }
 
-    private fun post(ctx: Context, url: String, headers: Map<String, String>, body: String): String {
+    private fun post(ctx: Context, url: String, headers: Map<String, String>, body: String): String = postRaw(ctx, url, headers, body.toByteArray())
+
+    private fun postRaw(ctx: Context, url: String, headers: Map<String, String>, body: ByteArray): String {
         val c = URL(url).openConnection() as HttpsURLConnection
         c.sslSocketFactory = sslFactory(ctx)
         c.connectTimeout = 15000
@@ -101,7 +104,7 @@ object GigaChat {
         c.requestMethod = "POST"
         c.doOutput = true
         headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
-        c.outputStream.use { it.write(body.toByteArray()) }
+        c.outputStream.use { it.write(body) }
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.readText().orEmpty()
         if (code !in 200..299) throw IOException("HTTP $code ${text.take(200)}")
@@ -146,5 +149,45 @@ object GigaChat {
             body,
         )
         JSONObject(r).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+    }
+
+    /** Загружает снимок в хранилище GigaChat; возвращает идентификатор файла. */
+    private fun upload(ctx: Context, tok: String, jpeg: ByteArray): String {
+        val b = "----mn" + System.currentTimeMillis()
+        val out = java.io.ByteArrayOutputStream()
+        fun w(t: String) = out.write(t.toByteArray())
+        w("--$b\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\ngeneral\r\n")
+        w("--$b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n")
+        out.write(jpeg)
+        w("\r\n--$b--\r\n")
+        val r = postRaw(ctx, FILES, mapOf("Authorization" to "Bearer $tok", "Content-Type" to "multipart/form-data; boundary=$b", "Accept" to "application/json"), out.toByteArray())
+        return JSONObject(r).getString("id")
+    }
+
+    /** Вопрос по снимку: загружает его, спрашивает модель с изображением и удаляет файл с сервера. */
+    suspend fun askImage(ctx: Context, authKey: String, prompt: String, jpeg: ByteArray): String = withContext(Dispatchers.IO) {
+        val tok = accessToken(ctx, authKey)
+        val id = upload(ctx, tok, jpeg)
+        try {
+            var last: Exception? = null
+            for (model in listOf("GigaChat-2-Max", "GigaChat-Max", "GigaChat-2-Pro", "GigaChat-Pro")) {
+                try {
+                    val body = JSONObject()
+                        .put("model", model)
+                        .put("temperature", 0.1)
+                        .put("max_tokens", 2000)
+                        .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt).put("attachments", JSONArray().put(id))))
+                        .toString()
+                    val r = post(ctx, CHAT, mapOf("Authorization" to "Bearer $tok", "Content-Type" to "application/json", "Accept" to "application/json"), body)
+                    return@withContext JSONObject(r).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                } catch (e: IOException) {
+                    last = e
+                    if (e.message?.startsWith("HTTP 4") != true) throw e
+                }
+            }
+            throw last ?: IOException("нет ответа")
+        } finally {
+            try { post(ctx, "$FILES/$id/delete", mapOf("Authorization" to "Bearer $tok", "Content-Type" to "application/json", "Accept" to "application/json"), "{}") } catch (_: Exception) { }
+        }
     }
 }
